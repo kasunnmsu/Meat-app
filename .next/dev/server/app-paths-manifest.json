@@ -1,0 +1,12 @@
+{
+  "/api/full-survey/save/route": "app/api/full-survey/save/route.js",
+  "/api/session-1/save/route": "app/api/session-1/save/route.js",
+  "/api/session-2/save/route": "app/api/session-2/save/route.js",
+  "/api/session-3/save/route": "app/api/session-3/save/route.js",
+  "/api/session-3/top-seals/route": "app/api/session-3/top-seals/route.js",
+  "/page": "app/page.js",
+  "/participant/start/page": "app/participant/start/page.js",
+  "/session-1/page": "app/session-1/page.js",
+  "/session-2/descriptions/page": "app/session-2/descriptions/page.js",
+  "/session-3/page": "app/session-3/page.js"
+}
