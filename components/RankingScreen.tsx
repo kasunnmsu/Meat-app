@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ProductCard from "@/components/ProductCard";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -17,6 +17,17 @@ export type RankingOption = {
   price?: number;
   priceIncreasePercent?: number;
   priceLevel?: string;
+
+  screenStartedAt?: string;
+  optionSelectedAt?: string;
+  purchaseConfirmedAt?: string;
+  timeSpentBeforeChoiceMs?: number;
+  timeSpentBeforeChoiceSeconds?: number;
+  timeTakenToConfirmMs?: number;
+  timeTakenToConfirmSeconds?: number;
+  changedPreferenceBeforeConfirming?: string;
+  initialSelectedOptionId?: string;
+  finalConfirmedOptionId?: string;
 };
 
 type RankingScreenProps = {
@@ -36,16 +47,74 @@ export default function RankingScreen({
   const [selectedRanking, setSelectedRanking] = useState<RankingOption[]>([]);
   const [pendingOption, setPendingOption] = useState<RankingOption | null>(null);
 
+  const [screenStartedAt, setScreenStartedAt] = useState<Date>(new Date());
+  const [optionSelectedAt, setOptionSelectedAt] = useState<Date | null>(null);
+  const [initialSelectedOptionId, setInitialSelectedOptionId] = useState("");
+
   const currentRank = selectedRanking.length + 1;
 
+  useEffect(() => {
+    setAvailableOptions(options);
+    setSelectedRanking([]);
+    setPendingOption(null);
+    setScreenStartedAt(new Date());
+    setOptionSelectedAt(null);
+    setInitialSelectedOptionId("");
+  }, [options]);
+
+  function resetChoiceTimer() {
+    setScreenStartedAt(new Date());
+    setOptionSelectedAt(null);
+    setInitialSelectedOptionId("");
+  }
+
   function handleSelect(option: RankingOption) {
+    const now = new Date();
+
     setPendingOption(option);
+    setOptionSelectedAt(now);
+
+    if (!initialSelectedOptionId) {
+      setInitialSelectedOptionId(option.id);
+    }
   }
 
   function handleConfirmChoice() {
     if (!pendingOption) return;
 
-    const nextRanking = [...selectedRanking, pendingOption];
+    const confirmedAt = new Date();
+    const selectedAt = optionSelectedAt || confirmedAt;
+
+    const timeSpentBeforeChoiceMs =
+      selectedAt.getTime() - screenStartedAt.getTime();
+
+    const timeTakenToConfirmMs =
+      confirmedAt.getTime() - selectedAt.getTime();
+
+    const changedPreferenceBeforeConfirming =
+      initialSelectedOptionId && initialSelectedOptionId !== pendingOption.id
+        ? "Yes"
+        : "No";
+
+    const trackedOption: RankingOption = {
+      ...pendingOption,
+      screenStartedAt: screenStartedAt.toISOString(),
+      optionSelectedAt: selectedAt.toISOString(),
+      purchaseConfirmedAt: confirmedAt.toISOString(),
+      timeSpentBeforeChoiceMs,
+      timeSpentBeforeChoiceSeconds: Number(
+        (timeSpentBeforeChoiceMs / 1000).toFixed(2)
+      ),
+      timeTakenToConfirmMs,
+      timeTakenToConfirmSeconds: Number(
+        (timeTakenToConfirmMs / 1000).toFixed(2)
+      ),
+      changedPreferenceBeforeConfirming,
+      initialSelectedOptionId: initialSelectedOptionId || pendingOption.id,
+      finalConfirmedOptionId: pendingOption.id,
+    };
+
+    const nextRanking = [...selectedRanking, trackedOption];
 
     const nextAvailableOptions = availableOptions.filter(
       (option) => option.id !== pendingOption.id
@@ -57,17 +126,22 @@ export default function RankingScreen({
 
     if (nextRanking.length === options.length) {
       onRankingComplete(nextRanking);
+      return;
     }
+
+    resetChoiceTimer();
   }
 
   function handleCancelChoice() {
     setPendingOption(null);
+    setOptionSelectedAt(null);
   }
 
   function handleClearSelections() {
     setAvailableOptions(options);
     setSelectedRanking([]);
     setPendingOption(null);
+    resetChoiceTimer();
   }
 
   function removeFromCart(optionId: string) {
@@ -81,6 +155,7 @@ export default function RankingScreen({
 
     setSelectedRanking(remainingRanking);
     setAvailableOptions([...availableOptions, removedOption]);
+    resetChoiceTimer();
   }
 
   return (
