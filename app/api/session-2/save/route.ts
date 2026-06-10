@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
+import { withFileLock } from "@/lib/fileLock";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ type ResultsStore = {
   participantRows: ParticipantRow[];
   longRows: LongRow[];
   sealReadingRows: SealReadingRow[];
+  rankingSealClickRows: SealReadingRow[];
 };
 
 export async function POST(request: Request) {
@@ -22,6 +24,7 @@ export async function POST(request: Request) {
     const participantRow: ParticipantRow = body.participantRow;
     const longRows: LongRow[] = body.longRows;
     const sealReadingRows: SealReadingRow[] = body.sealReadingRows;
+    const rankingSealClickRows: SealReadingRow[] = body.rankingSealClickRows || [];
 
     if (!participantRow) {
       return NextResponse.json(
@@ -52,63 +55,67 @@ export async function POST(request: Request) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    let store: ResultsStore = {
-      participantRows: [],
-      longRows: [],
-      sealReadingRows: [],
-    };
+    const result = await withFileLock(jsonPath, () => {
+      let store: ResultsStore = {
+        participantRows: [],
+        longRows: [],
+        sealReadingRows: [],
+        rankingSealClickRows: [],
+      };
 
-    if (fs.existsSync(jsonPath)) {
-      const rawJson = fs.readFileSync(jsonPath, "utf8");
+      if (fs.existsSync(jsonPath)) {
+        const rawJson = fs.readFileSync(jsonPath, "utf8");
 
-      if (rawJson.trim()) {
-        store = JSON.parse(rawJson);
+        if (rawJson.trim()) {
+          const parsed = JSON.parse(rawJson);
+          store = {
+            participantRows: parsed.participantRows || [],
+            longRows: parsed.longRows || [],
+            sealReadingRows: parsed.sealReadingRows || [],
+            rankingSealClickRows: parsed.rankingSealClickRows || [],
+          };
+        }
       }
-    }
 
-    store.participantRows.push(participantRow);
-    store.longRows.push(...longRows);
-    store.sealReadingRows.push(...sealReadingRows);
+      store.participantRows.push(participantRow);
+      store.longRows.push(...longRows);
+      store.sealReadingRows.push(...sealReadingRows);
+      store.rankingSealClickRows.push(...rankingSealClickRows);
 
-    fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
+      fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
 
-    const workbook = XLSX.utils.book_new();
+      const workbook = XLSX.utils.book_new();
 
-    const participantWorksheet = XLSX.utils.json_to_sheet(store.participantRows);
-    const longWorksheet = XLSX.utils.json_to_sheet(store.longRows);
-    const sealReadingWorksheet = XLSX.utils.json_to_sheet(store.sealReadingRows);
+      const participantWorksheet = XLSX.utils.json_to_sheet(store.participantRows);
+      const longWorksheet = XLSX.utils.json_to_sheet(store.longRows);
+      const sealReadingWorksheet = XLSX.utils.json_to_sheet(store.sealReadingRows);
+      const rankingClickWorksheet = XLSX.utils.json_to_sheet(store.rankingSealClickRows.length ? store.rankingSealClickRows : [{ note: "No ranking seal clicks recorded" }]);
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      participantWorksheet,
-      "Participant Data"
-    );
+      XLSX.utils.book_append_sheet(workbook, participantWorksheet, "Participant Data");
+      XLSX.utils.book_append_sheet(workbook, longWorksheet, "Long Format");
+      XLSX.utils.book_append_sheet(workbook, sealReadingWorksheet, "Seal Readings");
+      XLSX.utils.book_append_sheet(workbook, rankingClickWorksheet, "Ranking Seal Clicks");
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      longWorksheet,
-      "Long Format"
-    );
+      const excelBuffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      });
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      sealReadingWorksheet,
-      "Seal Readings"
-    );
+      fs.writeFileSync(excelPath, excelBuffer);
 
-    const excelBuffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
+      return {
+        participantRowsCount: store.participantRows.length,
+        longRowsCount: store.longRows.length,
+        sealReadingRowsCount: store.sealReadingRows.length,
+      };
     });
-
-    fs.writeFileSync(excelPath, excelBuffer);
 
     return NextResponse.json({
       success: true,
       message: "Session 2 participant saved.",
-      participantRows: store.participantRows.length,
-      longRows: store.longRows.length,
-      sealReadingRows: store.sealReadingRows.length,
+      participantRows: result.participantRowsCount,
+      longRows: result.longRowsCount,
+      sealReadingRows: result.sealReadingRowsCount,
       excelPath: "data/session-2-results.xlsx",
       jsonPath: "data/session-2-results.json",
     });

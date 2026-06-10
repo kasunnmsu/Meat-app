@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./mobile.css";
+import PendingBanner from "@/components/PendingBanner";
+import { LanguageProvider } from "@/lib/i18n";
 
 export const metadata: Metadata = {
   title: "Beef Choice Study",
-  description: "Research data collection app for beef choice experiments",
+  description: "Data collection app for beef choice experiments",
 };
 
 export default function RootLayout({
@@ -12,8 +15,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="pt-BR">
+      <body>
+        <LanguageProvider>
+          <PendingBanner />
+          {children}
+        </LanguageProvider>
+      </body>
     </html>
   );
 }

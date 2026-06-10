@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import ProductCard from "@/components/ProductCard";
 import ConfirmModal from "@/components/ConfirmModal";
+import { useLanguage, TranslationKey } from "@/lib/i18n";
 
 export type RankingOption = {
   id: string;
@@ -17,104 +19,59 @@ export type RankingOption = {
   price?: number;
   priceIncreasePercent?: number;
   priceLevel?: string;
-
-  screenStartedAt?: string;
-  optionSelectedAt?: string;
-  purchaseConfirmedAt?: string;
-  timeSpentBeforeChoiceMs?: number;
-  timeSpentBeforeChoiceSeconds?: number;
-  timeTakenToConfirmMs?: number;
-  timeTakenToConfirmSeconds?: number;
-  changedPreferenceBeforeConfirming?: string;
-  initialSelectedOptionId?: string;
-  finalConfirmedOptionId?: string;
 };
 
 type RankingScreenProps = {
   options: RankingOption[];
   sessionNumber: number;
+  sessionSuffix?: string;
+  title?: string;
+  description?: string;
+  location?: string;
+  sealZoom?: boolean;
+  showPriceInCart?: boolean;
+  clickedSealIds?: Set<string>;
   onRankingComplete: (ranking: RankingOption[]) => void;
   onSealClick?: (sealId?: string) => void;
+};
+
+const locationColors: Record<string, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
 };
 
 export default function RankingScreen({
   options,
   sessionNumber,
+  sessionSuffix,
+  title,
+  description,
+  location,
+  sealZoom,
+  showPriceInCart,
+  clickedSealIds,
   onRankingComplete,
   onSealClick,
 }: RankingScreenProps) {
+  const { t } = useLanguage();
   const [availableOptions, setAvailableOptions] = useState(options);
   const [selectedRanking, setSelectedRanking] = useState<RankingOption[]>([]);
   const [pendingOption, setPendingOption] = useState<RankingOption | null>(null);
 
-  const [screenStartedAt, setScreenStartedAt] = useState<Date>(new Date());
-  const [optionSelectedAt, setOptionSelectedAt] = useState<Date | null>(null);
-  const [initialSelectedOptionId, setInitialSelectedOptionId] = useState("");
-
   const currentRank = selectedRanking.length + 1;
 
-  useEffect(() => {
-    setAvailableOptions(options);
-    setSelectedRanking([]);
-    setPendingOption(null);
-    setScreenStartedAt(new Date());
-    setOptionSelectedAt(null);
-    setInitialSelectedOptionId("");
-  }, [options]);
-
-  function resetChoiceTimer() {
-    setScreenStartedAt(new Date());
-    setOptionSelectedAt(null);
-    setInitialSelectedOptionId("");
-  }
+  const stepKeys: TranslationKey[] = ["ranking.step1", "ranking.step2", "ranking.step3", "ranking.step4", "ranking.step5"];
+  const ordKeys: TranslationKey[] = ["ranking.ord1", "ranking.ord2", "ranking.ord3", "ranking.ord4", "ranking.ord5", "ranking.ord6", "ranking.ord7", "ranking.ord8", "ranking.ord9", "ranking.ord10"];
 
   function handleSelect(option: RankingOption) {
-    const now = new Date();
-
     setPendingOption(option);
-    setOptionSelectedAt(now);
-
-    if (!initialSelectedOptionId) {
-      setInitialSelectedOptionId(option.id);
-    }
   }
 
   function handleConfirmChoice() {
     if (!pendingOption) return;
 
-    const confirmedAt = new Date();
-    const selectedAt = optionSelectedAt || confirmedAt;
-
-    const timeSpentBeforeChoiceMs =
-      selectedAt.getTime() - screenStartedAt.getTime();
-
-    const timeTakenToConfirmMs =
-      confirmedAt.getTime() - selectedAt.getTime();
-
-    const changedPreferenceBeforeConfirming =
-      initialSelectedOptionId && initialSelectedOptionId !== pendingOption.id
-        ? "Yes"
-        : "No";
-
-    const trackedOption: RankingOption = {
-      ...pendingOption,
-      screenStartedAt: screenStartedAt.toISOString(),
-      optionSelectedAt: selectedAt.toISOString(),
-      purchaseConfirmedAt: confirmedAt.toISOString(),
-      timeSpentBeforeChoiceMs,
-      timeSpentBeforeChoiceSeconds: Number(
-        (timeSpentBeforeChoiceMs / 1000).toFixed(2)
-      ),
-      timeTakenToConfirmMs,
-      timeTakenToConfirmSeconds: Number(
-        (timeTakenToConfirmMs / 1000).toFixed(2)
-      ),
-      changedPreferenceBeforeConfirming,
-      initialSelectedOptionId: initialSelectedOptionId || pendingOption.id,
-      finalConfirmedOptionId: pendingOption.id,
-    };
-
-    const nextRanking = [...selectedRanking, trackedOption];
+    const nextRanking = [...selectedRanking, pendingOption];
 
     const nextAvailableOptions = availableOptions.filter(
       (option) => option.id !== pendingOption.id
@@ -123,25 +80,16 @@ export default function RankingScreen({
     setSelectedRanking(nextRanking);
     setAvailableOptions(nextAvailableOptions);
     setPendingOption(null);
-
-    if (nextRanking.length === options.length) {
-      onRankingComplete(nextRanking);
-      return;
-    }
-
-    resetChoiceTimer();
   }
 
   function handleCancelChoice() {
     setPendingOption(null);
-    setOptionSelectedAt(null);
   }
 
   function handleClearSelections() {
     setAvailableOptions(options);
     setSelectedRanking([]);
     setPendingOption(null);
-    resetChoiceTimer();
   }
 
   function removeFromCart(optionId: string) {
@@ -155,43 +103,54 @@ export default function RankingScreen({
 
     setSelectedRanking(remainingRanking);
     setAvailableOptions([...availableOptions, removedOption]);
-    resetChoiceTimer();
   }
 
   return (
     <div className="ranking-area">
       <header className="ranking-toolbar">
         <div>
-          <p>Session {sessionNumber}</p>
-          <h2>Choose rank #{currentRank}</h2>
+          <p>{t("common.session")} {sessionNumber}{sessionSuffix ? ` · ${sessionSuffix}` : ""}</p>
+          <h2>{title ?? (stepKeys[currentRank - 1] ? t(stepKeys[currentRank - 1]) : `${t("ranking.stepN")} #${currentRank}`)}</h2>
           <span>
-            Select the beef option you would buy next. Confirmed choices disappear from the screen.
+            {description ?? t("ranking.instruction")}
           </span>
         </div>
 
         <button type="button" onClick={handleClearSelections}>
-          Clear selections
+          {t("ranking.clear")}
         </button>
       </header>
 
       <div className="ranking-layout">
         <section className="product-grid">
-          {availableOptions.map((option, index) => (
-            <ProductCard
-              key={option.id}
-              option={option}
-              displayedPosition={index + 1}
-              onSelect={() => handleSelect(option)}
-              onSealClick={onSealClick ? () => onSealClick(option.sealId) : undefined}
-            />
-          ))}
+          <AnimatePresence mode="popLayout">
+            {availableOptions.map((option, index) => (
+              <motion.div
+                key={option.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.18 } }}
+                transition={{ duration: 0.28, ease: "easeInOut" }}
+              >
+                <ProductCard
+                  option={option}
+                  displayedPosition={index + 1}
+                  location={location}
+                  sealZoom={sealZoom}
+                  onSelect={() => handleSelect(option)}
+                  onSealClick={onSealClick ? () => onSealClick(option.sealId) : undefined}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </section>
 
-        <aside className="selection-cart">
+        <aside className={`selection-cart${selectedRanking.length === options.length ? " selection-cart--complete" : ""}`}>
           <div className="cart-header">
             <div>
-              <p>Preference order</p>
-              <h3>Selected choices</h3>
+              <p>{t("ranking.cartTitle")}</p>
+              <h3>{t("ranking.cartSubtitle")}</h3>
             </div>
 
             <span>
@@ -201,9 +160,9 @@ export default function RankingScreen({
 
           {selectedRanking.length === 0 ? (
             <div className="empty-cart">
-              <strong>No choices yet</strong>
+              <strong>{t("ranking.cartEmpty")}</strong>
               <p>
-                The participant’s ranking will appear here after each confirmed selection.
+                {t("ranking.cartEmptyDesc")}
               </p>
             </div>
           ) : (
@@ -214,15 +173,16 @@ export default function RankingScreen({
 
                   <div className="cart-item-info">
                     <strong>{option.title}</strong>
-                    <span>
-                      Cut: {option.cutId} | Seal: {option.sealId}
-                    </span>
+                    <span>{option.subtitle}</span>
+                    {showPriceInCart && typeof option.price === "number" && (
+                      <span className="cart-item-price">{t("ranking.currency")} {option.price.toFixed(2).replace(".", ",")} {t("ranking.perKg")}</span>
+                    )}
                   </div>
 
                   <button
                     type="button"
                     onClick={() => removeFromCart(option.id)}
-                    aria-label={`Remove ${option.title}`}
+                    aria-label={`${t("ranking.removeAria")} ${option.title}`}
                   >
                     ×
                   </button>
@@ -230,17 +190,29 @@ export default function RankingScreen({
               ))}
             </ol>
           )}
+
+          {selectedRanking.length === options.length && (
+            <button
+              type="button"
+              className="cart-complete-button"
+              style={{ background: locationColors[location ?? ""] ?? "#bb0b0b" }}
+              onClick={() => onRankingComplete(selectedRanking)}
+            >
+              {t("ranking.confirm")}
+            </button>
+          )}
         </aside>
       </div>
 
       <ConfirmModal
         open={Boolean(pendingOption)}
-        title="Confirm purchase intention"
+        title={t("ranking.modalTitle")}
         message={
           pendingOption
-            ? `Do you confirm that you would buy "${pendingOption.title}" as choice #${currentRank}?`
+            ? `${t("ranking.modalQ.pre")} "${pendingOption.title}${pendingOption.subtitle ? ` - ${pendingOption.subtitle}` : ""}" ${t("ranking.modalQ.mid")} ${ordKeys[currentRank - 1] ? t(ordKeys[currentRank - 1]) : `${currentRank}`} ${t("ranking.modalQ.suf")}`
             : ""
         }
+        confirmColor={locationColors[location ?? ""] ?? "#bb0b0b"}
         onConfirm={handleConfirmChoice}
         onCancel={handleCancelChoice}
       />

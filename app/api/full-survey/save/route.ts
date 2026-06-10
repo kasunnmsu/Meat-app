@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
+import { withFileLock } from "@/lib/fileLock";
 
 export const runtime = "nodejs";
 
@@ -147,58 +148,62 @@ export async function POST(request: Request) {
       full_survey_saved_at: new Date().toISOString(),
     };
 
-    let store: ResultsStore = {
-      participantRows: [],
-    };
+    const participantRowsCount = await withFileLock(jsonPath, () => {
+      let store: ResultsStore = {
+        participantRows: [],
+      };
 
-    if (fs.existsSync(jsonPath)) {
-      const raw = fs.readFileSync(jsonPath, "utf8");
+      if (fs.existsSync(jsonPath)) {
+        const raw = fs.readFileSync(jsonPath, "utf8");
 
-      if (raw.trim()) {
-        store = JSON.parse(raw);
+        if (raw.trim()) {
+          store = JSON.parse(raw);
+        }
       }
-    }
 
-    /*
-      One row per participant.
-      If this participant already exists, replace that participant's combined row.
-      If not, append a new participant row.
-    */
-    const existingIndex = store.participantRows.findIndex(
-      (row) => row.participant_id === participantId
-    );
+      /*
+        One row per participant.
+        If this participant already exists, replace that participant's combined row.
+        If not, append a new participant row.
+      */
+      const existingIndex = store.participantRows.findIndex(
+        (row) => row.participant_id === participantId
+      );
 
-    if (existingIndex >= 0) {
-      store.participantRows[existingIndex] = combinedRow;
-    } else {
-      store.participantRows.push(combinedRow);
-    }
+      if (existingIndex >= 0) {
+        store.participantRows[existingIndex] = combinedRow;
+      } else {
+        store.participantRows.push(combinedRow);
+      }
 
-    fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
+      fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
 
-    const workbook = XLSX.utils.book_new();
+      const workbook = XLSX.utils.book_new();
 
-    const participantWorksheet = XLSX.utils.json_to_sheet(
-      store.participantRows
-    );
+      const participantWorksheet = XLSX.utils.json_to_sheet(
+        store.participantRows
+      );
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      participantWorksheet,
-      "Full Survey Data"
-    );
+      XLSX.utils.book_append_sheet(
+        workbook,
+        participantWorksheet,
+        "Full Survey Data"
+      );
 
-    const excelBuffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
+      const excelBuffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      });
+
+      fs.writeFileSync(excelPath, excelBuffer);
+
+      return store.participantRows.length;
     });
-
-    fs.writeFileSync(excelPath, excelBuffer);
 
     return NextResponse.json({
       success: true,
       message: "Full survey combined file saved.",
-      participantRows: store.participantRows.length,
+      participantRows: participantRowsCount,
       excelPath: "data/full-survey-results.xlsx",
       jsonPath: "data/full-survey-results.json",
     });

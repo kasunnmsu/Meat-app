@@ -1,9 +1,16 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useLanguage } from "@/lib/i18n";
 
-const locations = ["PUCPR", "UFBA"];
+const locations = ["PUCPR", "UFBA", "NMSU"];
+
+const locationColors: Record<string, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
+};
 
 function createParticipantId(location: string) {
   const prefix = location.replace(/\s+/g, "").toUpperCase();
@@ -33,12 +40,25 @@ function clearPreviousParticipantData() {
 function ParticipantStartContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useLanguage();
 
   const mode = searchParams.get("mode");
   const nextPage = searchParams.get("next") || "/session-1";
   const isFullSurvey = mode === "survey";
 
   const [location, setLocation] = useState("PUCPR");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   const [participantId, setParticipantId] = useState("");
   const [existingParticipantId, setExistingParticipantId] = useState("");
   const [useExistingId, setUseExistingId] = useState(false);
@@ -71,7 +91,7 @@ function ParticipantStartContent() {
     const cleanId = existingParticipantId.trim();
 
     if (!cleanId) {
-      alert("Please enter an existing participant ID.");
+      alert(t("start.alertNoId"));
       return;
     }
 
@@ -90,7 +110,7 @@ function ParticipantStartContent() {
       id = existingParticipantId.trim();
 
       if (!id) {
-        alert("Please enter an existing participant ID.");
+        alert(t("start.alertNoId"));
         return;
       }
 
@@ -111,108 +131,100 @@ function ParticipantStartContent() {
     router.push(getDestination());
   }
 
-  function getSelectedSessionLabel() {
-    if (isFullSurvey) {
-      return "Full Survey — Sessions 1, 2, and 3";
-    }
-
-    if (nextPage.includes("session-3")) {
-      return "3rd Session";
-    }
-
-    if (nextPage.includes("session-2")) {
-      return "2nd Session";
-    }
-
-    return "1st Session";
-  }
 
   return (
-    <main className="start-page">
-      <section className="start-card">
-        <a href="/" className="back-link">← Back to home</a>
+    <main className="home-page">
+      <a href="/" className="back-btn-red" style={{ background: locationColors[location] ?? "#bb0b0b" }}>{t("start.back")}</a>
+      <div className="home-illustration">
+        <div className="home-card start-card-wide">
+          <label className="form-group">
+            <span>{t("start.location")}</span>
+            <div
+              ref={dropdownRef}
+              className="custom-select"
+              style={{ borderColor: locationColors[location] ?? "#bb0b0b" }}
+            >
+              <button
+                type="button"
+                className="custom-select-trigger"
+                onClick={() => setDropdownOpen((o) => !o)}
+              >
+                <span style={{ color: locationColors[location] ?? "#bb0b0b", fontWeight: 700 }}>{location}</span>
+                <span className="custom-select-arrow" style={{ color: locationColors[location] ?? "#bb0b0b" }}>▾</span>
+              </button>
 
-        <div className="start-header">
-          <div className="badge">
-            {isFullSurvey ? "New Survey" : "Participant Setup"}
+              {dropdownOpen && (
+                <ul className="custom-select-menu">
+                  {locations.map((item) => (
+                    <li key={item}>
+                      <button
+                        type="button"
+                        className={`custom-select-option${item === location ? " custom-select-option--active" : ""}`}
+                        style={item === location ? { background: locationColors[item], color: "#fff" } : undefined}
+                        onMouseEnter={(e) => {
+                          if (item !== location) (e.currentTarget as HTMLButtonElement).style.background = locationColors[item] + "22";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (item !== location) (e.currentTarget as HTMLButtonElement).style.background = "";
+                        }}
+                        onClick={() => { setLocation(item); setDropdownOpen(false); }}
+                      >
+                        {item}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </label>
+
+          <div className="start-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleGenerateId}
+            >
+              {t("start.createId")}
+            </button>
+
+            <button
+              type="button"
+              className="home-primary-btn"
+              style={{ background: locationColors[location] ?? "#bb0b0b" }}
+              onClick={handleContinue}
+            >
+              {t("start.continue")}
+            </button>
           </div>
 
-          <h1>{isFullSurvey ? "Start New Survey" : "Participant Start"}</h1>
+          {participantId && (
+            <div className="participant-id-box">
+              <span>{t("start.currentId")}</span>
+              <strong>{participantId}</strong>
+            </div>
+          )}
 
-          <p>
-            {isFullSurvey
-              ? "Create one unique participant ID. This same ID will be used across all three sessions."
-              : "Create a new participant ID, or enter an existing participant ID when continuing a previous participant."}
-          </p>
-        </div>
-
-        <div className="selected-session">
-          <span>Selected flow</span>
-          <strong>{getSelectedSessionLabel()}</strong>
-        </div>
-
-        <label className="form-group">
-          <span>Study location</span>
-
-          <select
-            value={location}
-            onChange={(event) => setLocation(event.target.value)}
-          >
-            {locations.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="start-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={handleGenerateId}
-          >
-            Create New Participant ID
-          </button>
-
-          <button
-            type="button"
-            className="primary-button"
-            onClick={handleContinue}
-          >
-            {isFullSurvey ? "Start Session 1" : "Start Session"}
-          </button>
-        </div>
-
-        {participantId && (
-          <div className="participant-id-box">
-            <span>Current Participant ID</span>
-            <strong>{participantId}</strong>
+          <div className="existing-id-box">
+            <h2>{t("start.existingTitle")}</h2>
+            <p>
+              {t("start.existingDesc")}
+            </p>
+            <input
+              type="text"
+              value={existingParticipantId}
+              onChange={(event) => setExistingParticipantId(event.target.value)}
+              placeholder={t("start.idPlaceholder")}
+            />
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleUseExistingId}
+            >
+              {t("start.useId")}
+            </button>
           </div>
-        )}
-
-        <div className="existing-id-box">
-          <h2>Use Existing Participant ID</h2>
-          <p>
-            Use this only when the same participant is continuing a later session.
-          </p>
-
-          <input
-            type="text"
-            value={existingParticipantId}
-            onChange={(event) => setExistingParticipantId(event.target.value)}
-            placeholder="Paste existing participant ID"
-          />
-
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={handleUseExistingId}
-          >
-            Use Existing ID
-          </button>
         </div>
-      </section>
+      </div>
     </main>
   );
 }
@@ -221,10 +233,10 @@ export default function ParticipantStartPage() {
   return (
     <Suspense
       fallback={
-        <main className="start-page">
-          <section className="start-card">
-            <p>Loading participant setup...</p>
-          </section>
+        <main className="home-page">
+          <div className="home-illustration">
+            <p>Carregando...</p>
+          </div>
         </main>
       }
     >

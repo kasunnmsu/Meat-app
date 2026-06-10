@@ -1,10 +1,4 @@
+node_modules
+.next
 .env
-node_modules/
-.DS_Store
-.env
-node_modules/
-.DS_Store
-.next/
-.env
-node_modules/
-.DS_Store
+.claude

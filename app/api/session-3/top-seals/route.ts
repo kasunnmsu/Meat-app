@@ -39,35 +39,40 @@ function readLongRows(fileName: string): LongRow[] {
   }
 }
 
-function calculateTopThreeSeals(rows: LongRow[], participantId: string) {
-  const participantRows = rows.filter(
+function calculateTopThreeSeals(sessionOneRows: LongRow[], sessionTwoRows: LongRow[], participantId: string) {
+  const s1Rows = sessionOneRows.filter(
+    (row) => row.participant_id === participantId && row.seal_id
+  );
+  const s2Rows = sessionTwoRows.filter(
     (row) => row.participant_id === participantId && row.seal_id
   );
 
-  if (participantRows.length === 0) {
+  if (s1Rows.length === 0 && s2Rows.length === 0) {
     return fallbackTopSeals;
   }
 
-  const scores = new Map<string, number>();
+  const totalScores = new Map<string, number>();
+  const session2Scores = new Map<string, number>();
 
-  for (const row of participantRows) {
+  for (const row of s1Rows) {
     const sealId = String(row.seal_id);
-    const rank = Number(row.selected_rank || 99);
-
-    /*
-      Rank 1 = 5 points
-      Rank 2 = 4 points
-      Rank 3 = 3 points
-      Rank 4 = 2 points
-      Rank 5 = 1 point
-    */
-    const score = Math.max(0, 6 - rank);
-
-    scores.set(sealId, (scores.get(sealId) || 0) + score);
+    const score = Math.max(0, 6 - Number(row.selected_rank || 99));
+    totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
   }
 
-  const topSealIds = Array.from(scores.entries())
-    .sort((a, b) => b[1] - a[1])
+  for (const row of s2Rows) {
+    const sealId = String(row.seal_id);
+    const score = Math.max(0, 6 - Number(row.selected_rank || 99));
+    totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
+    session2Scores.set(sealId, (session2Scores.get(sealId) || 0) + score);
+  }
+
+  const topSealIds = Array.from(totalScores.entries())
+    .sort((a, b) => {
+      const diff = b[1] - a[1];
+      if (diff !== 0) return diff;
+      return (session2Scores.get(b[0]) || 0) - (session2Scores.get(a[0]) || 0);
+    })
     .map(([sealId]) => sealId)
     .slice(0, 3);
 
@@ -96,15 +101,13 @@ export async function GET(request: Request) {
   const sessionOneRows = readLongRows("session-1-results.json");
   const sessionTwoRows = readLongRows("session-2-results.json");
 
-  const combinedRows = [...sessionOneRows, ...sessionTwoRows];
-
-  const topSealIds = calculateTopThreeSeals(combinedRows, participantId);
+  const topSealIds = calculateTopThreeSeals(sessionOneRows, sessionTwoRows, participantId);
 
   return NextResponse.json({
     participantId,
     topSealIds,
     source: "data/session-1-results.json and data/session-2-results.json",
-    rowsFoundForParticipant: combinedRows.filter(
+    rowsFoundForParticipant: [...sessionOneRows, ...sessionTwoRows].filter(
       (row) => row.participant_id === participantId
     ).length,
   });

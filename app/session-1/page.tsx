@@ -1,43 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RankingScreen, { RankingOption } from "@/components/RankingScreen";
+import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
 import { seededShuffle } from "@/lib/randomization";
-import { getRankingOptionsForLocation } from "@/lib/locationStudyConfig";
+import { getSession1Options } from "@/lib/locations";
+import { saveWithRetry } from "@/lib/saveWithRetry";
+import { useLanguage } from "@/lib/i18n";
 
 type Step = "ranking" | "final-confirmation" | "demographics" | "completed";
 
+const locationColors: Record<string, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
+};
+
 export default function SessionOnePage() {
+  const { t } = useLanguage();
   const [participantId, setParticipantId] = useState("");
-  const [participantLocation, setParticipantLocation] = useState<string | null>(null);
+  const [participantLocation, setParticipantLocation] = useState("");
   const [completedRanking, setCompletedRanking] = useState<RankingOption[]>([]);
   const [step, setStep] = useState<Step>("ranking");
+  const [isSavingFinal, setIsSavingFinal] = useState(false);
+  const [zoomedSealId, setZoomedSealId] = useState<string | null>(null);
+  const savingFinalRef = useRef(false);
 
   useEffect(() => {
-    const storedParticipantId =
-      localStorage.getItem("participantId") || "DEMO-PARTICIPANT";
-
-    const storedLocation =
-      localStorage.getItem("participantLocation") || "PUCPR";
-
-    setParticipantId(storedParticipantId);
-    setParticipantLocation(storedLocation);
+    setParticipantId(localStorage.getItem("participantId") || "DEMO-PARTICIPANT");
+    setParticipantLocation(localStorage.getItem("participantLocation") || "UNKNOWN");
   }, []);
 
   const randomizationSeed = useMemo(() => {
     return participantId ? `${participantId}-session-1` : "demo-session-1";
   }, [participantId]);
 
-  const locationOptions = useMemo(() => {
-    if (!participantLocation) return [];
-
-    return getRankingOptionsForLocation(participantLocation, 1);
-  }, [participantLocation]);
-
   const randomizedOptions = useMemo(() => {
-    return seededShuffle(locationOptions, randomizationSeed);
-  }, [locationOptions, randomizationSeed]);
+    const baseOptions = getSession1Options(participantLocation);
+    return seededShuffle(baseOptions, randomizationSeed);
+  }, [randomizationSeed, participantLocation]);
 
   function handleRankingComplete(ranking: RankingOption[]) {
     setCompletedRanking(ranking);
@@ -45,10 +47,20 @@ export default function SessionOnePage() {
   }
 
   async function handleFinalConfirmationYes() {
+    if (savingFinalRef.current) return;
+
     const surveyMode = localStorage.getItem("surveyMode");
 
     if (surveyMode === "full") {
-      await saveSessionOneWithoutQuestionnaire();
+      savingFinalRef.current = true;
+      setIsSavingFinal(true);
+
+      try {
+        await saveSessionOneWithoutQuestionnaire();
+      } finally {
+        savingFinalRef.current = false;
+        setIsSavingFinal(false);
+      }
       return;
     }
 
@@ -60,12 +72,12 @@ export default function SessionOnePage() {
     setStep("ranking");
   }
 
-  function buildLongRows(demographics?: DemographicsData) {
+  async function saveSessionOneWithoutQuestionnaire() {
     const timestamp = new Date().toISOString();
 
-    return completedRanking.map((option, index) => ({
+    const longRows = completedRanking.map((option, index) => ({
       participant_id: participantId,
-      location: participantLocation || "",
+      location: participantLocation,
       session_number: 1,
       method: "Choice experiment / Best-Worst Scaling ranking",
       randomization_seed: randomizationSeed,
@@ -78,39 +90,24 @@ export default function SessionOnePage() {
       cut_image_url: option.cutImageUrl || "",
       seal_image_url: option.sealImageUrl || "",
       seal_color: option.sealColor || "",
-      screen_started_at: option.screenStartedAt || "",
-      option_selected_at: option.optionSelectedAt || "",
-      purchase_confirmed_at: option.purchaseConfirmedAt || "",
-      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs || "",
-      time_spent_before_choice_seconds: option.timeSpentBeforeChoiceSeconds || "",
-      time_taken_to_confirm_ms: option.timeTakenToConfirmMs || "",
-      time_taken_to_confirm_seconds: option.timeTakenToConfirmSeconds || "",
-      changed_preference_before_confirming:
-        option.changedPreferenceBeforeConfirming || "",
-      initial_selected_option_id: option.initialSelectedOptionId || "",
-      final_confirmed_option_id: option.finalConfirmedOptionId || "",
-      gender: demographics?.gender || "Collected in Session 3",
-      age_group: demographics?.ageGroup || "Collected in Session 3",
-      education_level: demographics?.educationLevel || "Collected in Session 3",
-      income_group: demographics?.incomeGroup || "Collected in Session 3",
+      gender: "Collected in Session 3",
+      age_group: "Collected in Session 3",
+      education_level: "Collected in Session 3",
+      income_group: "Collected in Session 3",
       timestamp,
     }));
-  }
 
-  function buildParticipantRow(demographics?: DemographicsData) {
-    const timestamp = new Date().toISOString();
-
-    return {
+    const participantRow = {
       participant_id: participantId,
-      location: participantLocation || "",
+      location: participantLocation,
       session_number: 1,
       method: "Choice experiment / Best-Worst Scaling ranking",
       randomization_seed: randomizationSeed,
 
-      gender: demographics?.gender || "Collected in Session 3",
-      age_group: demographics?.ageGroup || "Collected in Session 3",
-      education_level: demographics?.educationLevel || "Collected in Session 3",
-      income_group: demographics?.incomeGroup || "Collected in Session 3",
+      gender: "Collected in Session 3",
+      age_group: "Collected in Session 3",
+      education_level: "Collected in Session 3",
+      income_group: "Collected in Session 3",
 
       rank_1_option_id: completedRanking[0]?.id || "",
       rank_1_cut_id: completedRanking[0]?.cutId || "",
@@ -139,111 +136,155 @@ export default function SessionOnePage() {
 
       timestamp,
     };
-  }
 
-  async function saveSessionOne(demographics?: DemographicsData) {
-    const longRows = buildLongRows(demographics);
-    const participantRow = buildParticipantRow(demographics);
-
-    const response = await fetch("/api/session-1/save", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        participantRow,
-        longRows,
-      }),
+    const result = await saveWithRetry("/api/session-1/save", {
+      participantRow,
+      longRows,
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      console.error("Session 1 save failed:", errorData);
-      alert("Could not save Session 1. Please try again.");
-      return;
-    }
 
     localStorage.setItem("session-1-ranking", JSON.stringify(longRows));
 
-    if (demographics) {
-      localStorage.setItem("session-1-demographics", JSON.stringify(demographics));
+    if (result.queued) {
+      alert(t("common.saveAlert"));
     }
 
     setStep("completed");
   }
 
-  async function saveSessionOneWithoutQuestionnaire() {
-    await saveSessionOne();
+  async function exportExcel(demographics: DemographicsData) {
+  const timestamp = new Date().toISOString();
+
+  const longRows = completedRanking.map((option, index) => ({
+    participant_id: participantId,
+    location: participantLocation,
+    session_number: 1,
+    method: "Choice experiment / Best-Worst Scaling ranking",
+    randomization_seed: randomizationSeed,
+    selected_rank: index + 1,
+    option_id: option.id,
+    cut_id: option.cutId || "",
+    seal_id: option.sealId || "",
+    title: option.title,
+    subtitle: option.subtitle || "",
+    cut_image_url: option.cutImageUrl || "",
+    seal_image_url: option.sealImageUrl || "",
+    seal_color: option.sealColor || "",
+    gender: demographics.gender,
+    age_group: demographics.ageGroup,
+    education_level: demographics.educationLevel,
+    income_group: demographics.incomeGroup,
+    timestamp,
+  }));
+
+  const participantRow = {
+    participant_id: participantId,
+    location: participantLocation,
+    session_number: 1,
+    method: "Choice experiment / Best-Worst Scaling ranking",
+    randomization_seed: randomizationSeed,
+
+    gender: demographics.gender,
+    age_group: demographics.ageGroup,
+    education_level: demographics.educationLevel,
+    income_group: demographics.incomeGroup,
+
+    rank_1_option_id: completedRanking[0]?.id || "",
+    rank_1_cut_id: completedRanking[0]?.cutId || "",
+    rank_1_seal_id: completedRanking[0]?.sealId || "",
+    rank_1_title: completedRanking[0]?.title || "",
+
+    rank_2_option_id: completedRanking[1]?.id || "",
+    rank_2_cut_id: completedRanking[1]?.cutId || "",
+    rank_2_seal_id: completedRanking[1]?.sealId || "",
+    rank_2_title: completedRanking[1]?.title || "",
+
+    rank_3_option_id: completedRanking[2]?.id || "",
+    rank_3_cut_id: completedRanking[2]?.cutId || "",
+    rank_3_seal_id: completedRanking[2]?.sealId || "",
+    rank_3_title: completedRanking[2]?.title || "",
+
+    rank_4_option_id: completedRanking[3]?.id || "",
+    rank_4_cut_id: completedRanking[3]?.cutId || "",
+    rank_4_seal_id: completedRanking[3]?.sealId || "",
+    rank_4_title: completedRanking[3]?.title || "",
+
+    rank_5_option_id: completedRanking[4]?.id || "",
+    rank_5_cut_id: completedRanking[4]?.cutId || "",
+    rank_5_seal_id: completedRanking[4]?.sealId || "",
+    rank_5_title: completedRanking[4]?.title || "",
+
+    timestamp,
+  };
+
+  const result = await saveWithRetry("/api/session-1/save", {
+    participantRow,
+    longRows,
+  });
+
+  localStorage.setItem("session-1-ranking", JSON.stringify(longRows));
+  localStorage.setItem("session-1-demographics", JSON.stringify(demographics));
+
+  if (result.queued) {
+    alert(t("common.saveAlert"));
   }
 
-  async function exportExcel(demographics: DemographicsData) {
-    await saveSessionOne(demographics);
-  }
+  setStep("completed");
+}
 
   return (
-    <main className="study-page">
+    <main className={`study-page location-${participantLocation.toLowerCase()}`}>
+
+
       <section className="study-shell">
-        <a href="/" className="back-link">
-          ← Back to sessions
-        </a>
+        <StepTransition stepKey={step}>
 
-        <header className="study-header">
-          <div className="badge">Session 1</div>
-          <h1>Choice Experiment / BWS Ranking</h1>
-
-          <p>
-            Five beef cut and seal options are presented at once. The participant chooses
-            the option they would buy first, confirms the choice, and the selected option
-            disappears. This continues until all options are ranked.
-          </p>
-
-          <div className="participant-strip">
-            <span>Participant ID</span>
-            <strong>{participantId || "Loading..."}</strong>
-          </div>
-
-          <div className="participant-strip">
-            <span>Location</span>
-            <strong>{participantLocation || "Loading..."}</strong>
-          </div>
-
-          <div className="participant-strip">
-            <span>Randomization seed</span>
-            <strong>{randomizationSeed}</strong>
-          </div>
-        </header>
-
-        {step === "ranking" && !participantLocation && (
-          <section className="complete-card">
-            <p>Loading location-specific options...</p>
-          </section>
-        )}
-
-        {step === "ranking" && participantLocation && (
+        {step === "ranking" && (
           <RankingScreen
             key={`${participantLocation}-${randomizationSeed}`}
             options={randomizedOptions}
             sessionNumber={1}
+            title={t("s1.rankingTitle")}
+            description={t("s1.rankingDesc")}
+            location={participantLocation}
+            sealZoom={true}
             onRankingComplete={handleRankingComplete}
           />
         )}
 
         {step === "final-confirmation" && (
           <section className="complete-card">
-            <div className="badge">Final confirmation</div>
-            <h2>Confirm your ranking</h2>
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s1.badge")}</div>
+            <h2>{t("s1.confirmTitle")}</h2>
             <p>
-              Please review the final order of preference. Do you confirm these choices?
+              {t("s1.confirmDesc")}
             </p>
 
             <ol className="final-ranking-list">
               {completedRanking.map((option, index) => (
                 <li key={option.id}>
-                  <strong>#{index + 1}</strong>
-                  <span>{option.title}</span>
-                  <small>
-                    Cut: {option.cutId} | Seal: {option.sealId}
-                  </small>
+                  <strong style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>#{index + 1}</strong>
+                  <div className="final-ranking-images">
+                    {option.cutImageUrl && (
+                      <img src={option.cutImageUrl} alt={option.title} className="final-cut-img" />
+                    )}
+                    {option.sealImageUrl && (
+                      <button
+                        type="button"
+                        className="final-seal-zoom-btn"
+                        onClick={() => setZoomedSealId(zoomedSealId === option.id ? null : option.id)}
+                      >
+                        <img
+                          src={option.sealImageUrl}
+                          alt=""
+                          className={zoomedSealId === option.id ? "final-seal-img final-seal-zoomed" : "final-seal-img"}
+                        />
+                      </button>
+                    )}
+                  </div>
+                  <div className="final-ranking-text">
+                    <span>{option.title}</span>
+                    <small>{option.subtitle}</small>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -254,15 +295,17 @@ export default function SessionOnePage() {
                 className="secondary-button"
                 onClick={handleFinalConfirmationNo}
               >
-                No, redo ranking
+                {t("s1.no")}
               </button>
 
               <button
                 type="button"
                 className="primary-button"
+                style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
                 onClick={handleFinalConfirmationYes}
+                disabled={isSavingFinal}
               >
-                Yes, save and continue
+                {isSavingFinal ? t("s1.saving") : t("s1.yes")}
               </button>
             </div>
           </section>
@@ -270,27 +313,24 @@ export default function SessionOnePage() {
 
         {step === "demographics" && (
           <section className="complete-card">
-            <DemographicsForm onSubmit={exportExcel} />
+            <DemographicsForm onSubmit={exportExcel} locationColor={locationColors[participantLocation] ?? "#bb0b0b"} />
           </section>
         )}
 
         {step === "completed" && (
           <section className="complete-card">
-            <div className="badge">Completed</div>
-            <h2>Session 1 Complete</h2>
-            <p>The Session 1 ranking has been saved.</p>
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("common.completed")}</div>
+            <h2>{t("s1.completedTitle")}</h2>
+            <p>{t("common.clickContinue1")} <strong>{t("common.continue")}</strong> {t("common.clickContinue2")}</p>
 
-            <div className="final-actions">
-              <a href="/" className="secondary-link-button">
-                Return to Home
-              </a>
-
-              <a href="/session-2/descriptions" className="primary-link-button">
-                Continue to Session 2
+            <div className="final-actions" style={{ gridTemplateColumns: "1fr" }}>
+              <a href="/session-2/descriptions" className="primary-link-button" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
+                {t("common.continue")}
               </a>
             </div>
           </section>
         )}
+        </StepTransition>
       </section>
     </main>
   );

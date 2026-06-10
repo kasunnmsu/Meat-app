@@ -4,6 +4,7 @@ type ConfirmModalProps = {
   open: boolean;
   title: string;
   message: string;
+  confirmColor?: string;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -12,6 +13,7 @@ export default function ConfirmModal({
   open,
   title,
   message,
+  confirmColor,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -25,11 +27,11 @@ export default function ConfirmModal({
 
         <div className="modal-actions">
           <button type="button" onClick={onCancel} className="secondary-button">
-            No, go back
+            Não, voltar
           </button>
 
-          <button type="button" onClick={onConfirm} className="primary-button">
-            Yes, confirm
+          <button type="button" onClick={onConfirm} className="danger-button" style={confirmColor ? { background: confirmColor } : undefined}>
+            Sim, confirmar
           </button>
         </div>
       </section>

@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import RankingScreen, { RankingOption } from "@/components/RankingScreen";
+import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
 import { seededShuffle } from "@/lib/randomization";
-import {
-  getRankingOptionsForLocation,
-  getSealsForLocation,
-  LocationSealInfo,
-} from "@/lib/locationStudyConfig";
+import { getSession2Options } from "@/lib/locations";
+import { saveWithRetry } from "@/lib/saveWithRetry";
+import { useLanguage, TranslationKey } from "@/lib/i18n";
+
+type SealInfo = {
+  id: string;
+  name: string;
+  color: string;
+  imageUrl: string;
+  description: string;
+  nameKey: TranslationKey;
+  descKey: TranslationKey;
+};
 
 type SealReadingRecord = {
   sealId: string;
@@ -17,6 +27,7 @@ type SealReadingRecord = {
 };
 
 type Step =
+  | "transition"
   | "reading"
   | "agreement"
   | "ranking"
@@ -24,40 +35,207 @@ type Step =
   | "demographics"
   | "completed";
 
+const SEALS_PUCPR: SealInfo[] = [
+  {
+    id: "red-1",
+    name: "Certificação Angus",
+    color: "red",
+    imageUrl: "/images/seals/pucpr/a.png",
+    description:
+      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
+    nameKey: "seal.angus.full",
+    descKey: "seal.angus.desc",
+  },
+  {
+    id: "red-2",
+    name: "Certificação Bem-Estar Animal",
+    color: "red",
+    imageUrl: "/images/seals/pucpr/bea.png",
+    description:
+      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
+    nameKey: "seal.welfare.full",
+    descKey: "seal.welfare.desc",
+  },
+  {
+    id: "green-1",
+    name: "Selo de Carne Bovina",
+    color: "red",
+    imageUrl: "/images/seals/pucpr/cb.png",
+    description:
+      "Produto não possui qualquer tipo de certificação especial.",
+    nameKey: "seal.traditional.full",
+    descKey: "seal.traditional.desc",
+  },
+  {
+    id: "green-2",
+    name: "Certificação Carne Cultivada",
+    color: "red",
+    imageUrl: "/images/seals/pucpr/cc.png",
+    description:
+      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
+    nameKey: "seal.cultivated.full",
+    descKey: "seal.cultivated.desc",
+  },
+  {
+    id: "green-3",
+    name: "Certificação Orgânica",
+    color: "red",
+    imageUrl: "/images/seals/pucpr/o.png",
+    description:
+      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
+    nameKey: "seal.organic.full",
+    descKey: "seal.organic.desc",
+  },
+];
+
+const SEALS_UFBA: SealInfo[] = [
+  {
+    id: "red-1",
+    name: "Certificação Angus",
+    color: "green",
+    imageUrl: "/images/seals/ufba/a.png",
+    description:
+      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
+    nameKey: "seal.angus.full",
+    descKey: "seal.angus.desc",
+  },
+  {
+    id: "red-2",
+    name: "Certificação Bem-Estar Animal",
+    color: "green",
+    imageUrl: "/images/seals/ufba/bea.png",
+    description:
+      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
+    nameKey: "seal.welfare.full",
+    descKey: "seal.welfare.desc",
+  },
+  {
+    id: "green-1",
+    name: "Selo de Carne Bovina",
+    color: "green",
+    imageUrl: "/images/seals/ufba/cb.png",
+    description:
+      "Produto não possui qualquer tipo de certificação especial.",
+    nameKey: "seal.traditional.full",
+    descKey: "seal.traditional.desc",
+  },
+  {
+    id: "green-2",
+    name: "Certificação Orgânica",
+    color: "green",
+    imageUrl: "/images/seals/ufba/o.png",
+    description:
+      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
+    nameKey: "seal.organic.full",
+    descKey: "seal.organic.desc",
+  },
+  {
+    id: "green-3",
+    name: "Certificação Carne Cultivada",
+    color: "green",
+    imageUrl: "/images/seals/ufba/cc.png",
+    description:
+      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
+    nameKey: "seal.cultivated.full",
+    descKey: "seal.cultivated.desc",
+  },
+];
+
+const SEALS_NMSU: SealInfo[] = [
+  {
+    id: "red-1",
+    name: "Certificação Angus",
+    color: "red",
+    imageUrl: "/images/seals/nmsu/angus.png",
+    description:
+      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
+    nameKey: "seal.angus.full",
+    descKey: "seal.angus.desc",
+  },
+  {
+    id: "red-2",
+    name: "Certificação Bem-Estar Animal",
+    color: "red",
+    imageUrl: "/images/seals/nmsu/animal.png",
+    description:
+      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
+    nameKey: "seal.welfare.full",
+    descKey: "seal.welfare.desc",
+  },
+  {
+    id: "green-1",
+    name: "Selo de Carne Bovina",
+    color: "red",
+    imageUrl: "/images/seals/nmsu/beef.png",
+    description:
+      "Produto não possui qualquer tipo de certificação especial.",
+    nameKey: "seal.traditional.full",
+    descKey: "seal.traditional.desc",
+  },
+  {
+    id: "green-2",
+    name: "Certificação Carne Cultivada",
+    color: "red",
+    imageUrl: "/images/seals/nmsu/cultured.png",
+    description:
+      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
+    nameKey: "seal.cultivated.full",
+    descKey: "seal.cultivated.desc",
+  },
+  {
+    id: "green-3",
+    name: "Certificação Orgânica",
+    color: "red",
+    imageUrl: "/images/seals/nmsu/organic.png",
+    description:
+      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
+    nameKey: "seal.organic.full",
+    descKey: "seal.organic.desc",
+  },
+];
+
+const locationColors: Record<string, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
+};
+
 export default function SessionTwoDescriptionsPage() {
+  const router = useRouter();
+  const { t } = useLanguage();
   const [participantId, setParticipantId] = useState("");
   const [participantLocation, setParticipantLocation] = useState("");
-  const [step, setStep] = useState<Step>("reading");
+  const [step, setStep] = useState<Step>("transition");
   const [readSealIds, setReadSealIds] = useState<string[]>([]);
   const [sealReadingRecords, setSealReadingRecords] = useState<SealReadingRecord[]>([]);
-  const [activeSeal, setActiveSeal] = useState<LocationSealInfo | null>(null);
+  const [activeSeal, setActiveSeal] = useState<SealInfo | null>(null);
   const [completedRanking, setCompletedRanking] = useState<RankingOption[]>([]);
   const [agreedToDescriptions, setAgreedToDescriptions] = useState("");
+  const [isSavingFinal, setIsSavingFinal] = useState(false);
+  const [zoomedSealId, setZoomedSealId] = useState<string | null>(null);
+  const [rankingSealClicks, setRankingSealClicks] = useState<Record<string, number>>({});
+  const [rankingSealClickRecords, setRankingSealClickRecords] = useState<{ sealId: string; sealName: string; clickedAt: string }[]>([]);
+  const savingFinalRef = useRef(false);
 
   useEffect(() => {
     setParticipantId(localStorage.getItem("participantId") || "DEMO-PARTICIPANT");
-    setParticipantLocation(localStorage.getItem("participantLocation") || "PUCPR");
+    setParticipantLocation(localStorage.getItem("participantLocation") || "UNKNOWN");
   }, []);
 
-  const seals = useMemo(() => {
-    return getSealsForLocation(participantLocation);
-  }, [participantLocation]);
-
-  const baseOptions = useMemo(() => {
-    return getRankingOptionsForLocation(participantLocation, 2);
-  }, [participantLocation]);
+  const seals = participantLocation === "UFBA" ? SEALS_UFBA : participantLocation === "NMSU" ? SEALS_NMSU : SEALS_PUCPR;
 
   const randomizationSeed = useMemo(() => {
     return participantId ? `${participantId}-session-2` : "demo-session-2";
   }, [participantId]);
 
   const randomizedOptions = useMemo(() => {
+    const baseOptions = getSession2Options(participantLocation);
     return seededShuffle(baseOptions, randomizationSeed);
-  }, [baseOptions, randomizationSeed]);
+  }, [randomizationSeed, participantLocation]);
 
   const allSealsRead = readSealIds.length === seals.length;
 
-  function openSealDescription(seal: LocationSealInfo) {
+  function openSealDescription(seal: SealInfo) {
     setActiveSeal(seal);
 
     if (!readSealIds.includes(seal.id)) {
@@ -94,10 +272,20 @@ export default function SessionTwoDescriptionsPage() {
   }
 
   async function handleFinalConfirmationYes() {
+    if (savingFinalRef.current) return;
+
     const surveyMode = localStorage.getItem("surveyMode");
 
     if (surveyMode === "full") {
-      await saveSessionTwoWithoutQuestionnaire();
+      savingFinalRef.current = true;
+      setIsSavingFinal(true);
+
+      try {
+        await saveSessionTwoWithoutQuestionnaire();
+      } finally {
+        savingFinalRef.current = false;
+        setIsSavingFinal(false);
+      }
       return;
     }
 
@@ -113,10 +301,10 @@ export default function SessionTwoDescriptionsPage() {
     return seals.find((seal) => seal.id === sealId) || null;
   }
 
-  function buildLongRows(demographics?: DemographicsData) {
+  async function saveSessionTwoWithoutQuestionnaire() {
     const timestamp = new Date().toISOString();
 
-    return completedRanking.map((option, index) => ({
+    const longRows = completedRanking.map((option, index) => ({
       participant_id: participantId,
       location: participantLocation,
       session_number: 2,
@@ -132,29 +320,14 @@ export default function SessionTwoDescriptionsPage() {
       cut_image_url: option.cutImageUrl || "",
       seal_image_url: option.sealImageUrl || "",
       seal_color: option.sealColor || "",
-      screen_started_at: option.screenStartedAt || "",
-      option_selected_at: option.optionSelectedAt || "",
-      purchase_confirmed_at: option.purchaseConfirmedAt || "",
-      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs || "",
-      time_spent_before_choice_seconds: option.timeSpentBeforeChoiceSeconds || "",
-      time_taken_to_confirm_ms: option.timeTakenToConfirmMs || "",
-      time_taken_to_confirm_seconds: option.timeTakenToConfirmSeconds || "",
-      changed_preference_before_confirming:
-        option.changedPreferenceBeforeConfirming || "",
-      initial_selected_option_id: option.initialSelectedOptionId || "",
-      final_confirmed_option_id: option.finalConfirmedOptionId || "",
-      gender: demographics?.gender || "Collected in Session 3",
-      age_group: demographics?.ageGroup || "Collected in Session 3",
-      education_level: demographics?.educationLevel || "Collected in Session 3",
-      income_group: demographics?.incomeGroup || "Collected in Session 3",
+      gender: "Collected in Session 3",
+      age_group: "Collected in Session 3",
+      education_level: "Collected in Session 3",
+      income_group: "Collected in Session 3",
       timestamp,
     }));
-  }
 
-  function buildParticipantRow(demographics?: DemographicsData) {
-    const timestamp = new Date().toISOString();
-
-    return {
+    const participantRow = {
       participant_id: participantId,
       location: participantLocation,
       session_number: 2,
@@ -162,10 +335,10 @@ export default function SessionTwoDescriptionsPage() {
       randomization_seed: randomizationSeed,
       agreed_to_descriptions: agreedToDescriptions,
 
-      gender: demographics?.gender || "Collected in Session 3",
-      age_group: demographics?.ageGroup || "Collected in Session 3",
-      education_level: demographics?.educationLevel || "Collected in Session 3",
-      income_group: demographics?.incomeGroup || "Collected in Session 3",
+      gender: "Collected in Session 3",
+      age_group: "Collected in Session 3",
+      education_level: "Collected in Session 3",
+      income_group: "Collected in Session 3",
 
       seals_read_count: readSealIds.length,
       all_seals_read: allSealsRead ? "Yes" : "No",
@@ -197,12 +370,8 @@ export default function SessionTwoDescriptionsPage() {
 
       timestamp,
     };
-  }
 
-  function buildSealReadingRows() {
-    const timestamp = new Date().toISOString();
-
-    return sealReadingRecords.map((record) => ({
+    const sealReadingRows = sealReadingRecords.map((record) => ({
       participant_id: participantId,
       location: participantLocation,
       session_number: 2,
@@ -213,91 +382,182 @@ export default function SessionTwoDescriptionsPage() {
       agreed_to_descriptions: agreedToDescriptions,
       timestamp,
     }));
-  }
 
-  async function saveSessionTwoBase(demographics?: DemographicsData) {
-    const longRows = buildLongRows(demographics);
-    const participantRow = buildParticipantRow(demographics);
-    const sealReadingRows = buildSealReadingRows();
+    const rankingSealClickRows = rankingSealClickRecords.map((record) => ({
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      phase: "ranking",
+      seal_id: record.sealId,
+      seal_name: record.sealName,
+      clicked_at: record.clickedAt,
+      total_clicks_this_seal: rankingSealClicks[record.sealId] || 1,
+      timestamp,
+    }));
 
-    const response = await fetch("/api/session-2/save", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        participantRow,
-        longRows,
-        sealReadingRows,
-      }),
+    const result = await saveWithRetry("/api/session-2/save", {
+      participantRow,
+      longRows,
+      sealReadingRows,
+      rankingSealClickRows,
     });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      console.error("Session 2 save failed:", errorData);
-      alert("Could not save Session 2. Please try again.");
-      return;
-    }
 
     localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
     localStorage.setItem("session-2-seal-readings", JSON.stringify(sealReadingRows));
 
-    if (demographics) {
-      localStorage.setItem("session-2-demographics", JSON.stringify(demographics));
+    if (result.queued) {
+      alert(t("common.saveAlert"));
+    }
+
+    router.push("/session-3");
+  }
+
+  async function saveSessionTwo(demographics: DemographicsData) {
+    const timestamp = new Date().toISOString();
+
+    const longRows = completedRanking.map((option, index) => ({
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
+      randomization_seed: randomizationSeed,
+      agreed_to_descriptions: agreedToDescriptions,
+      selected_rank: index + 1,
+      option_id: option.id,
+      cut_id: option.cutId || "",
+      seal_id: option.sealId || "",
+      title: option.title,
+      subtitle: option.subtitle || "",
+      cut_image_url: option.cutImageUrl || "",
+      seal_image_url: option.sealImageUrl || "",
+      seal_color: option.sealColor || "",
+      gender: demographics.gender,
+      age_group: demographics.ageGroup,
+      education_level: demographics.educationLevel,
+      income_group: demographics.incomeGroup,
+      timestamp,
+    }));
+
+    const participantRow = {
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
+      randomization_seed: randomizationSeed,
+      agreed_to_descriptions: agreedToDescriptions,
+
+      gender: demographics.gender,
+      age_group: demographics.ageGroup,
+      education_level: demographics.educationLevel,
+      income_group: demographics.incomeGroup,
+
+      seals_read_count: readSealIds.length,
+      all_seals_read: allSealsRead ? "Yes" : "No",
+
+      rank_1_option_id: completedRanking[0]?.id || "",
+      rank_1_cut_id: completedRanking[0]?.cutId || "",
+      rank_1_seal_id: completedRanking[0]?.sealId || "",
+      rank_1_title: completedRanking[0]?.title || "",
+
+      rank_2_option_id: completedRanking[1]?.id || "",
+      rank_2_cut_id: completedRanking[1]?.cutId || "",
+      rank_2_seal_id: completedRanking[1]?.sealId || "",
+      rank_2_title: completedRanking[1]?.title || "",
+
+      rank_3_option_id: completedRanking[2]?.id || "",
+      rank_3_cut_id: completedRanking[2]?.cutId || "",
+      rank_3_seal_id: completedRanking[2]?.sealId || "",
+      rank_3_title: completedRanking[2]?.title || "",
+
+      rank_4_option_id: completedRanking[3]?.id || "",
+      rank_4_cut_id: completedRanking[3]?.cutId || "",
+      rank_4_seal_id: completedRanking[3]?.sealId || "",
+      rank_4_title: completedRanking[3]?.title || "",
+
+      rank_5_option_id: completedRanking[4]?.id || "",
+      rank_5_cut_id: completedRanking[4]?.cutId || "",
+      rank_5_seal_id: completedRanking[4]?.sealId || "",
+      rank_5_title: completedRanking[4]?.title || "",
+
+      timestamp,
+    };
+
+    const sealReadingRows = sealReadingRecords.map((record) => ({
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      seal_id: record.sealId,
+      seal_name: record.sealName,
+      opened_description: "Yes",
+      opened_at: record.openedAt,
+      agreed_to_descriptions: agreedToDescriptions,
+      timestamp,
+    }));
+
+    const rankingSealClickRows = rankingSealClickRecords.map((record) => ({
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      phase: "ranking",
+      seal_id: record.sealId,
+      seal_name: record.sealName,
+      clicked_at: record.clickedAt,
+      total_clicks_this_seal: rankingSealClicks[record.sealId] || 1,
+      timestamp,
+    }));
+
+    const result = await saveWithRetry("/api/session-2/save", {
+      participantRow,
+      longRows,
+      sealReadingRows,
+      rankingSealClickRows,
+    });
+
+    localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
+    localStorage.setItem("session-2-demographics", JSON.stringify(demographics));
+    localStorage.setItem("session-2-seal-readings", JSON.stringify(sealReadingRows));
+
+    if (result.queued) {
+      alert(t("common.saveAlert"));
     }
 
     setStep("completed");
   }
 
-  async function saveSessionTwoWithoutQuestionnaire() {
-    await saveSessionTwoBase();
-  }
-
-  async function saveSessionTwo(demographics: DemographicsData) {
-    await saveSessionTwoBase(demographics);
-  }
-
   return (
-    <main className="study-page">
+    <main className={`study-page location-${participantLocation.toLowerCase()}`}>
       <section className="study-shell">
-        <a href="/" className="back-link">
-          ← Back to sessions
-        </a>
-
-        <header className="study-header">
-          <div className="badge">Session 2</div>
-          <h1>Seal Descriptions + Choice Ranking</h1>
-
-          <p>
-            Participants must click each seal and read its description before continuing.
-            After all descriptions are read, the participant confirms whether they agree
-            with the presented information.
-          </p>
-
-          <div className="participant-strip">
-            <span>Participant ID</span>
-            <strong>{participantId || "Loading..."}</strong>
-          </div>
-
-          <div className="participant-strip">
-            <span>Location</span>
-            <strong>{participantLocation || "Loading..."}</strong>
-          </div>
-        </header>
+        <StepTransition stepKey={step}>
+        {step === "transition" && (
+          <section className="complete-card session-transition-card">
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.introBadge")}</div>
+            <h2>{t("s2.introTitle")}</h2>
+            <p>
+              {t("s2.introDesc")}
+            </p>
+            <button
+              type="button"
+              className="primary-button full-width-button"
+              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+              onClick={() => setStep("reading")}
+            >
+              {t("common.continue")}
+            </button>
+          </section>
+        )}
 
         {step === "reading" && (
           <section className="session-two-card">
             <div className="session-two-heading">
               <div>
-                <h2>Read all seal descriptions</h2>
+                <h2>{t("s2.readTitle")}</h2>
                 <p>
-                  Click each seal to read a brief description. A verification mark will
-                  appear after the description has been opened.
+                  {t("s2.readDesc")}
                 </p>
               </div>
 
-              <div className="read-counter">
-                {readSealIds.length}/{seals.length} read
+              <div className="read-counter" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
+                {readSealIds.length}/{seals.length} {t("s2.readCount")}
               </div>
             </div>
 
@@ -313,15 +573,10 @@ export default function SessionTwoDescriptionsPage() {
                     onClick={() => openSealDescription(seal)}
                   >
                     <div className="seal-image-holder">
-                      <img src={seal.imageUrl} alt={seal.name} />
+                      <img src={seal.imageUrl} alt={t(seal.nameKey)} />
                     </div>
 
-                    <div>
-                      <h3>{seal.name}</h3>
-                      <p>Click to read description</p>
-                    </div>
-
-                    {wasRead && <div className="read-check">✓</div>}
+                    <div className={wasRead ? "read-check" : "read-check read-check--empty"}>✓</div>
                   </button>
                 );
               })}
@@ -330,24 +585,26 @@ export default function SessionTwoDescriptionsPage() {
             <button
               type="button"
               className={allSealsRead ? "purchase-button" : "purchase-button disabled"}
+              style={allSealsRead ? { background: locationColors[participantLocation] ?? "#bb0b0b" } : undefined}
               onClick={() => {
                 if (allSealsRead) {
                   setStep("agreement");
                 }
               }}
             >
-              {allSealsRead ? "Continue" : "Read all seal descriptions to continue"}
+              {allSealsRead
+                ? t("s2.continueReady")
+                : t("s2.continueBlocked")}
             </button>
           </section>
         )}
 
         {step === "agreement" && (
           <section className="complete-card">
-            <div className="badge">Confirmation</div>
-            <h2>Do you agree with the descriptions?</h2>
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.confirmBadge")}</div>
+            <h2>{t("s2.confirmTitle")}</h2>
             <p>
-              Please confirm whether you agree with the descriptions presented for the
-              labels. If you select “No”, you will return to the label-reading screen.
+              {t("s2.confirmDesc")}
             </p>
 
             <div className="final-actions">
@@ -356,15 +613,16 @@ export default function SessionTwoDescriptionsPage() {
                 className="secondary-button"
                 onClick={handleAgreementNo}
               >
-                No, review descriptions
+                {t("s2.no")}
               </button>
 
               <button
                 type="button"
                 className="primary-button"
+                style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
                 onClick={handleAgreementYes}
               >
-                Yes, continue to ranking
+                {t("s2.yes")}
               </button>
             </div>
           </section>
@@ -372,39 +630,61 @@ export default function SessionTwoDescriptionsPage() {
 
         {step === "ranking" && (
           <section className="session-two-ranking-note">
-            <div className="description-reminder">
-              <strong>Reminder:</strong> During this ranking task, the participant may
-              click a seal image to view its description again.
-            </div>
-
             <RankingScreen
+              key={`${participantLocation}-${randomizationSeed}`}
               options={randomizedOptions}
               sessionNumber={2}
+              title={t("s2.rankingTitle")}
+              description={t("s2.rankingDesc")}
+              location={participantLocation}
               onRankingComplete={handleRankingComplete}
               onSealClick={(sealId) => {
                 const seal = getSealById(sealId);
-                if (seal) openSealDescription(seal);
+                if (seal) {
+                  openSealDescription(seal);
+                  setRankingSealClicks((prev) => ({ ...prev, [seal.id]: (prev[seal.id] || 0) + 1 }));
+                  setRankingSealClickRecords((prev) => [...prev, { sealId: seal.id, sealName: seal.name, clickedAt: new Date().toISOString() }]);
+                }
               }}
+              clickedSealIds={new Set(Object.keys(rankingSealClicks))}
             />
           </section>
         )}
 
         {step === "final-confirmation" && (
           <section className="complete-card">
-            <div className="badge">Final confirmation</div>
-            <h2>Confirm your Session 2 ranking</h2>
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.finalBadge")}</div>
+            <h2>{t("s2.finalTitle")}</h2>
             <p>
-              Please review the final order of preference. Do you confirm these choices?
+              {t("s2.finalDesc")}
             </p>
 
             <ol className="final-ranking-list">
               {completedRanking.map((option, index) => (
                 <li key={option.id}>
-                  <strong>#{index + 1}</strong>
-                  <span>{option.title}</span>
-                  <small>
-                    Cut: {option.cutId} | Seal: {option.sealId}
-                  </small>
+                  <strong style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>#{index + 1}</strong>
+                  <div className="final-ranking-images">
+                    {option.cutImageUrl && (
+                      <img src={option.cutImageUrl} alt={option.title} className="final-cut-img" />
+                    )}
+                    {option.sealImageUrl && (
+                      <button
+                        type="button"
+                        className="final-seal-zoom-btn"
+                        onClick={() => setZoomedSealId(zoomedSealId === option.id ? null : option.id)}
+                      >
+                        <img
+                          src={option.sealImageUrl}
+                          alt=""
+                          className={zoomedSealId === option.id ? "final-seal-img final-seal-zoomed" : "final-seal-img"}
+                        />
+                      </button>
+                    )}
+                  </div>
+                  <div className="final-ranking-text">
+                    <span>{option.title}</span>
+                    <small>{option.subtitle}</small>
+                  </div>
                 </li>
               ))}
             </ol>
@@ -415,15 +695,17 @@ export default function SessionTwoDescriptionsPage() {
                 className="secondary-button"
                 onClick={handleFinalConfirmationNo}
               >
-                No, redo ranking
+                {t("s2.finalNo")}
               </button>
 
               <button
                 type="button"
                 className="primary-button"
+                style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
                 onClick={handleFinalConfirmationYes}
+                disabled={isSavingFinal}
               >
-                Yes, save and continue
+                {isSavingFinal ? t("s2.saving") : t("s2.finalYes")}
               </button>
             </div>
           </section>
@@ -431,43 +713,42 @@ export default function SessionTwoDescriptionsPage() {
 
         {step === "demographics" && (
           <section className="complete-card">
-            <DemographicsForm onSubmit={saveSessionTwo} />
+            <DemographicsForm onSubmit={saveSessionTwo} locationColor={locationColors[participantLocation] ?? "#bb0b0b"} />
           </section>
         )}
 
         {step === "completed" && (
           <section className="complete-card">
-            <div className="badge">Completed</div>
-            <h2>Session 2 Complete</h2>
-            <p>The seal-reading step and ranking task have been saved.</p>
+            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("common.completed")}</div>
+            <h2>{t("s2.completedTitle")}</h2>
+            <p>{t("common.clickContinue1")} <strong>{t("common.continue")}</strong> {t("common.clickContinue2")}</p>
 
-            <div className="final-actions">
-              <a href="/" className="secondary-link-button">
-                Return to Home
-              </a>
-
-              <a href="/session-3" className="primary-link-button">
-                Continue to Session 3
+            <div className="final-actions" style={{ gridTemplateColumns: "1fr" }}>
+              <a href="/session-3" className="primary-link-button" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
+                {t("common.continue")}
               </a>
             </div>
           </section>
         )}
+        </StepTransition>
       </section>
 
       {activeSeal && (
         <div className="modal-backdrop">
           <section className="modal-card seal-modal-card">
-            <img src={activeSeal.imageUrl} alt={activeSeal.name} />
+            <div className="modal-seal-check">✓</div>
+            <img src={activeSeal.imageUrl} alt={t(activeSeal.nameKey)} />
 
-            <h2>{activeSeal.name}</h2>
-            <p>{activeSeal.description}</p>
+            <h2>{t(activeSeal.nameKey)}</h2>
+            <p>{t(activeSeal.descKey)}</p>
 
             <button
               type="button"
               className="primary-button"
+              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
               onClick={closeSealDescription}
             >
-              I have read this description
+              {t("s2.readBtn")}
             </button>
           </section>
         </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import fs from "fs";
 import path from "path";
+import { withFileLock } from "@/lib/fileLock";
 
 export const runtime = "nodejs";
 
@@ -42,63 +43,59 @@ export async function POST(request: Request) {
       fs.mkdirSync(dataDir, { recursive: true });
     }
 
-    let store: ResultsStore = {
-      participantRows: [],
-      longRows: [],
-    };
+    const result = await withFileLock(jsonPath, () => {
+      let store: ResultsStore = {
+        participantRows: [],
+        longRows: [],
+      };
 
-    if (fs.existsSync(jsonPath)) {
-      const rawJson = fs.readFileSync(jsonPath, "utf8");
+      if (fs.existsSync(jsonPath)) {
+        const rawJson = fs.readFileSync(jsonPath, "utf8");
 
-      if (rawJson.trim()) {
-        store = JSON.parse(rawJson);
+        if (rawJson.trim()) {
+          store = JSON.parse(rawJson);
+        }
       }
-    }
 
-    /*
-      This is the important part:
-      append the new participant row to the existing JSON store.
-      Do not replace previous participant rows.
-    */
-    store.participantRows.push(participantRow);
-    store.longRows.push(...longRows);
+      store.participantRows.push(participantRow);
+      store.longRows.push(...longRows);
 
-    fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
+      fs.writeFileSync(jsonPath, JSON.stringify(store, null, 2), "utf8");
 
-    const workbook = XLSX.utils.book_new();
+      const workbook = XLSX.utils.book_new();
 
-    const participantWorksheet = XLSX.utils.json_to_sheet(
-      store.participantRows
-    );
+      const participantWorksheet = XLSX.utils.json_to_sheet(
+        store.participantRows
+      );
 
-    const longWorksheet = XLSX.utils.json_to_sheet(
-      store.longRows
-    );
+      const longWorksheet = XLSX.utils.json_to_sheet(store.longRows);
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      participantWorksheet,
-      "Participant Data"
-    );
+      XLSX.utils.book_append_sheet(
+        workbook,
+        participantWorksheet,
+        "Participant Data"
+      );
 
-    XLSX.utils.book_append_sheet(
-      workbook,
-      longWorksheet,
-      "Long Format"
-    );
+      XLSX.utils.book_append_sheet(workbook, longWorksheet, "Long Format");
 
-    const excelBuffer = XLSX.write(workbook, {
-      type: "buffer",
-      bookType: "xlsx",
+      const excelBuffer = XLSX.write(workbook, {
+        type: "buffer",
+        bookType: "xlsx",
+      });
+
+      fs.writeFileSync(excelPath, excelBuffer);
+
+      return {
+        participantRowsCount: store.participantRows.length,
+        longRowsCount: store.longRows.length,
+      };
     });
-
-    fs.writeFileSync(excelPath, excelBuffer);
 
     return NextResponse.json({
       success: true,
       message: "Session 1 participant saved.",
-      participantRows: store.participantRows.length,
-      longRows: store.longRows.length,
+      participantRows: result.participantRowsCount,
+      longRows: result.longRowsCount,
       excelPath: "data/session-1-results.xlsx",
       jsonPath: "data/session-1-results.json",
     });
