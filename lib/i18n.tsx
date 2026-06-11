@@ -24,6 +24,8 @@ const dictionary = {
     "start.alertNoId": "Por favor, insira um ID de participante existente.",
 
     "common.continue": "Continuar",
+    "common.noBack": "Não, voltar",
+    "common.yesConfirm": "Sim, confirmar",
     "common.completed": "Concluído",
     "common.session": "Sessão",
     "common.saveAlert": "Não foi possível enviar agora. Seus dados estão salvos localmente e serão reenviados automaticamente.",
@@ -116,6 +118,7 @@ const dictionary = {
     "s3.finish": "Finalizar",
     "s3.readBtn": "Li esta descrição",
     "s3.cutTitle": "Picanha bovina",
+    "s3.cutTitleNmsu": "Bife bovino",
 
     "demo.alert": "Por favor, responda todas as perguntas demográficas antes de continuar.",
     "demo.badge": "Questionário demográfico",
@@ -181,6 +184,8 @@ const dictionary = {
     "start.alertNoId": "Please enter an existing participant ID.",
 
     "common.continue": "Continue",
+    "common.noBack": "No, go back",
+    "common.yesConfirm": "Yes, confirm",
     "common.completed": "Completed",
     "common.session": "Session",
     "common.saveAlert": "Could not send now. Your data is saved locally and will be resent automatically.",
@@ -273,6 +278,7 @@ const dictionary = {
     "s3.finish": "Finish",
     "s3.readBtn": "I have read this description",
     "s3.cutTitle": "Beef top sirloin",
+    "s3.cutTitleNmsu": "Beef steak",
 
     "demo.alert": "Please answer all demographic questions before continuing.",
     "demo.badge": "Demographic questionnaire",

@@ -200,9 +200,71 @@ const locationColors: Record<string, string> = {
   NMSU: "#bb0b0b",
 };
 
+function getSealNameKey(
+  location: string,
+  sealId?: string
+): TranslationKey {
+  if (sealId === "red-1") {
+    return "seal.angus.short";
+  }
+
+  if (sealId === "red-2") {
+    return "seal.welfare.short";
+  }
+
+  if (sealId === "green-1") {
+    return "seal.traditional.short";
+  }
+
+  if (sealId === "green-2") {
+    return location === "UFBA"
+      ? "seal.organic.short"
+      : "seal.cultivated.short";
+  }
+
+  if (sealId === "green-3") {
+    return location === "UFBA"
+      ? "seal.cultivated.short"
+      : "seal.organic.short";
+  }
+
+  return "seal.traditional.short";
+}
+
+
+function addRankingTimingFields(
+  participantRow: Record<string, string | number>,
+  ranking: RankingOption[]
+) {
+  ranking.forEach((option, index) => {
+    const prefix = `rank_${index + 1}`;
+
+    participantRow[`${prefix}_screen_started_at`] =
+      option.screenStartedAt ?? "";
+    participantRow[`${prefix}_option_selected_at`] =
+      option.optionSelectedAt ?? "";
+    participantRow[`${prefix}_purchase_confirmed_at`] =
+      option.purchaseConfirmedAt ?? "";
+    participantRow[`${prefix}_time_spent_before_choice_ms`] =
+      option.timeSpentBeforeChoiceMs ?? "";
+    participantRow[`${prefix}_time_spent_before_choice_seconds`] =
+      option.timeSpentBeforeChoiceSeconds ?? "";
+    participantRow[`${prefix}_time_taken_to_confirm_ms`] =
+      option.timeTakenToConfirmMs ?? "";
+    participantRow[`${prefix}_time_taken_to_confirm_seconds`] =
+      option.timeTakenToConfirmSeconds ?? "";
+    participantRow[`${prefix}_changed_preference_before_confirming`] =
+      option.changedPreferenceBeforeConfirming ?? "";
+    participantRow[`${prefix}_initial_selected_option_id`] =
+      option.initialSelectedOptionId ?? "";
+    participantRow[`${prefix}_final_confirmed_option_id`] =
+      option.finalConfirmedOptionId ?? "";
+  });
+}
+
 export default function SessionTwoDescriptionsPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [participantId, setParticipantId] = useState("");
   const [participantLocation, setParticipantLocation] = useState("");
   const [step, setStep] = useState<Step>("transition");
@@ -232,6 +294,27 @@ export default function SessionTwoDescriptionsPage() {
     const baseOptions = getSession2Options(participantLocation);
     return seededShuffle(baseOptions, randomizationSeed);
   }, [randomizationSeed, participantLocation]);
+
+
+  const translatedOptions = useMemo(() => {
+    const translatedCutTitle =
+      participantLocation === "NMSU"
+        ? t("s3.cutTitleNmsu")
+        : t("s3.cutTitle");
+
+    return randomizedOptions.map((option) => ({
+      ...option,
+      title: translatedCutTitle,
+      subtitle: t(
+        getSealNameKey(participantLocation, option.sealId)
+      ),
+    }));
+  }, [
+    randomizedOptions,
+    participantLocation,
+    language,
+    t,
+  ]);
 
   const allSealsRead = readSealIds.length === seals.length;
 
@@ -320,6 +403,19 @@ export default function SessionTwoDescriptionsPage() {
       cut_image_url: option.cutImageUrl || "",
       seal_image_url: option.sealImageUrl || "",
       seal_color: option.sealColor || "",
+      screen_started_at: option.screenStartedAt ?? "",
+      option_selected_at: option.optionSelectedAt ?? "",
+      purchase_confirmed_at: option.purchaseConfirmedAt ?? "",
+      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs ?? "",
+      time_spent_before_choice_seconds:
+        option.timeSpentBeforeChoiceSeconds ?? "",
+      time_taken_to_confirm_ms: option.timeTakenToConfirmMs ?? "",
+      time_taken_to_confirm_seconds:
+        option.timeTakenToConfirmSeconds ?? "",
+      changed_preference_before_confirming:
+        option.changedPreferenceBeforeConfirming ?? "",
+      initial_selected_option_id: option.initialSelectedOptionId ?? "",
+      final_confirmed_option_id: option.finalConfirmedOptionId ?? "",
       gender: "Collected in Session 3",
       age_group: "Collected in Session 3",
       education_level: "Collected in Session 3",
@@ -327,7 +423,7 @@ export default function SessionTwoDescriptionsPage() {
       timestamp,
     }));
 
-    const participantRow = {
+    const participantRow: Record<string, string | number> = {
       participant_id: participantId,
       location: participantLocation,
       session_number: 2,
@@ -395,7 +491,9 @@ export default function SessionTwoDescriptionsPage() {
       timestamp,
     }));
 
-    const result = await saveWithRetry("/api/session-2/save", {
+    addRankingTimingFields(participantRow, completedRanking);
+
+  const result = await saveWithRetry("/api/session-2/save", {
       participantRow,
       longRows,
       sealReadingRows,
@@ -431,6 +529,19 @@ export default function SessionTwoDescriptionsPage() {
       cut_image_url: option.cutImageUrl || "",
       seal_image_url: option.sealImageUrl || "",
       seal_color: option.sealColor || "",
+      screen_started_at: option.screenStartedAt ?? "",
+      option_selected_at: option.optionSelectedAt ?? "",
+      purchase_confirmed_at: option.purchaseConfirmedAt ?? "",
+      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs ?? "",
+      time_spent_before_choice_seconds:
+        option.timeSpentBeforeChoiceSeconds ?? "",
+      time_taken_to_confirm_ms: option.timeTakenToConfirmMs ?? "",
+      time_taken_to_confirm_seconds:
+        option.timeTakenToConfirmSeconds ?? "",
+      changed_preference_before_confirming:
+        option.changedPreferenceBeforeConfirming ?? "",
+      initial_selected_option_id: option.initialSelectedOptionId ?? "",
+      final_confirmed_option_id: option.finalConfirmedOptionId ?? "",
       gender: demographics.gender,
       age_group: demographics.ageGroup,
       education_level: demographics.educationLevel,
@@ -438,7 +549,7 @@ export default function SessionTwoDescriptionsPage() {
       timestamp,
     }));
 
-    const participantRow = {
+    const participantRow: Record<string, string | number> = {
       participant_id: participantId,
       location: participantLocation,
       session_number: 2,
@@ -506,7 +617,9 @@ export default function SessionTwoDescriptionsPage() {
       timestamp,
     }));
 
-    const result = await saveWithRetry("/api/session-2/save", {
+    addRankingTimingFields(participantRow, completedRanking);
+
+  const result = await saveWithRetry("/api/session-2/save", {
       participantRow,
       longRows,
       sealReadingRows,
@@ -632,7 +745,7 @@ export default function SessionTwoDescriptionsPage() {
           <section className="session-two-ranking-note">
             <RankingScreen
               key={`${participantLocation}-${randomizationSeed}`}
-              options={randomizedOptions}
+              options={translatedOptions}
               sessionNumber={2}
               title={t("s2.rankingTitle")}
               description={t("s2.rankingDesc")}

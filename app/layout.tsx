@@ -3,6 +3,7 @@ import "./globals.css";
 import "./mobile.css";
 import PendingBanner from "@/components/PendingBanner";
 import { LanguageProvider } from "@/lib/i18n";
+import Providers from "./providers";
 
 export const metadata: Metadata = {
   title: "Beef Choice Study",
@@ -19,7 +20,7 @@ export default function RootLayout({
       <body>
         <LanguageProvider>
           <PendingBanner />
-          {children}
+          <Providers>{children}</Providers>
         </LanguageProvider>
       </body>
     </html>

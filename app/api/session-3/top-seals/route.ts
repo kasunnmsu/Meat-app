@@ -1,114 +1,171 @@
-import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { NextRequest, NextResponse } from "next/server";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 export const runtime = "nodejs";
 
-type LongRow = {
+type RankingRow = {
   participant_id?: string;
-  selected_rank?: number | string;
   seal_id?: string;
+  selected_rank?: number | string;
 };
 
-type ResultsStore = {
-  participantRows?: Record<string, string | number>[];
-  longRows?: LongRow[];
+type ResultsFile = {
+  participantRows?: Record<string, unknown>[];
+  longRows?: RankingRow[];
 };
+
+const SESSION_1_WEIGHT = 0.33;
+const SESSION_2_WEIGHT = 0.67;
 
 const fallbackTopSeals = ["red-1", "red-2", "green-1"];
 
-function readLongRows(fileName: string): LongRow[] {
-  const filePath = path.join(process.cwd(), "data", fileName);
-
-  if (!fs.existsSync(filePath)) {
-    return [];
-  }
-
+async function readResultsFile(
+  filename: string
+): Promise<ResultsFile> {
   try {
-    const raw = fs.readFileSync(filePath, "utf8");
+    const filePath = path.join(
+      process.cwd(),
+      "data",
+      filename
+    );
 
-    if (!raw.trim()) {
-      return [];
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+
+    return {
+      participantRows: Array.isArray(parsed.participantRows)
+        ? parsed.participantRows
+        : [],
+      longRows: Array.isArray(parsed.longRows)
+        ? parsed.longRows
+        : [],
+    };
+  } catch {
+    return {
+      participantRows: [],
+      longRows: [],
+    };
+  }
+}
+
+function addWeightedScores(
+  rows: RankingRow[],
+  participantId: string,
+  sessionWeight: number,
+  weightedScores: Map<string, number>,
+  sessionTwoScores?: Map<string, number>
+) {
+  for (const row of rows) {
+    if (row.participant_id !== participantId) {
+      continue;
     }
 
-    const store: ResultsStore = JSON.parse(raw);
+    const sealId = row.seal_id;
 
-    return Array.isArray(store.longRows) ? store.longRows : [];
-  } catch {
-    return [];
+    if (!sealId) {
+      continue;
+    }
+
+    const selectedRank = Number(row.selected_rank ?? 99);
+
+    // Rank 1 = 5, rank 2 = 4, ... rank 5 = 1.
+    const rankScore = Math.max(0, 6 - selectedRank);
+    const weightedScore = rankScore * sessionWeight;
+
+    weightedScores.set(
+      sealId,
+      (weightedScores.get(sealId) ?? 0) + weightedScore
+    );
+
+    if (sessionTwoScores) {
+      sessionTwoScores.set(
+        sealId,
+        (sessionTwoScores.get(sealId) ?? 0) + rankScore
+      );
+    }
   }
 }
 
-function calculateTopThreeSeals(sessionOneRows: LongRow[], sessionTwoRows: LongRow[], participantId: string) {
-  const s1Rows = sessionOneRows.filter(
-    (row) => row.participant_id === participantId && row.seal_id
-  );
-  const s2Rows = sessionTwoRows.filter(
-    (row) => row.participant_id === participantId && row.seal_id
-  );
-
-  if (s1Rows.length === 0 && s2Rows.length === 0) {
-    return fallbackTopSeals;
-  }
-
-  const totalScores = new Map<string, number>();
-  const session2Scores = new Map<string, number>();
-
-  for (const row of s1Rows) {
-    const sealId = String(row.seal_id);
-    const score = Math.max(0, 6 - Number(row.selected_rank || 99));
-    totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
-  }
-
-  for (const row of s2Rows) {
-    const sealId = String(row.seal_id);
-    const score = Math.max(0, 6 - Number(row.selected_rank || 99));
-    totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
-    session2Scores.set(sealId, (session2Scores.get(sealId) || 0) + score);
-  }
-
-  const topSealIds = Array.from(totalScores.entries())
-    .sort((a, b) => {
-      const diff = b[1] - a[1];
-      if (diff !== 0) return diff;
-      return (session2Scores.get(b[0]) || 0) - (session2Scores.get(a[0]) || 0);
-    })
-    .map(([sealId]) => sealId)
-    .slice(0, 3);
-
-  if (topSealIds.length >= 3) {
-    return topSealIds;
-  }
-
-  const missingFallbacks = fallbackTopSeals.filter(
-    (sealId) => !topSealIds.includes(sealId)
-  );
-
-  return [...topSealIds, ...missingFallbacks].slice(0, 3);
-}
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const participantId = searchParams.get("participantId");
+export async function GET(request: NextRequest) {
+  const participantId =
+    request.nextUrl.searchParams.get("participantId")?.trim();
 
   if (!participantId) {
     return NextResponse.json(
-      { error: "participantId is required." },
-      { status: 400 }
+      {
+        error: "participantId is required",
+      },
+      {
+        status: 400,
+      }
     );
   }
 
-  const sessionOneRows = readLongRows("session-1-results.json");
-  const sessionTwoRows = readLongRows("session-2-results.json");
+  const [sessionOneResults, sessionTwoResults] =
+    await Promise.all([
+      readResultsFile("session-1-results.json"),
+      readResultsFile("session-2-results.json"),
+    ]);
 
-  const topSealIds = calculateTopThreeSeals(sessionOneRows, sessionTwoRows, participantId);
+  const weightedScores = new Map<string, number>();
+  const sessionTwoScores = new Map<string, number>();
+
+  addWeightedScores(
+    sessionOneResults.longRows ?? [],
+    participantId,
+    SESSION_1_WEIGHT,
+    weightedScores
+  );
+
+  addWeightedScores(
+    sessionTwoResults.longRows ?? [],
+    participantId,
+    SESSION_2_WEIGHT,
+    weightedScores,
+    sessionTwoScores
+  );
+
+  const sortedScores = Array.from(weightedScores.entries())
+    .sort((a, b) => {
+      const weightedDifference = b[1] - a[1];
+
+      if (weightedDifference !== 0) {
+        return weightedDifference;
+      }
+
+      const sessionTwoDifference =
+        (sessionTwoScores.get(b[0]) ?? 0) -
+        (sessionTwoScores.get(a[0]) ?? 0);
+
+      if (sessionTwoDifference !== 0) {
+        return sessionTwoDifference;
+      }
+
+      return a[0].localeCompare(b[0]);
+    });
+
+  const selectedSealIds = sortedScores
+    .map(([sealId]) => sealId)
+    .slice(0, 3);
+
+  const missingFallbacks = fallbackTopSeals.filter(
+    (sealId) => !selectedSealIds.includes(sealId)
+  );
+
+  const topSealIds = [
+    ...selectedSealIds,
+    ...missingFallbacks,
+  ].slice(0, 3);
 
   return NextResponse.json({
     participantId,
     topSealIds,
-    source: "data/session-1-results.json and data/session-2-results.json",
-    rowsFoundForParticipant: [...sessionOneRows, ...sessionTwoRows].filter(
-      (row) => row.participant_id === participantId
-    ).length,
+    weights: {
+      session1: SESSION_1_WEIGHT,
+      session2: SESSION_2_WEIGHT,
+      total: SESSION_1_WEIGHT + SESSION_2_WEIGHT,
+    },
+    weightedScores: Object.fromEntries(sortedScores),
   });
 }
