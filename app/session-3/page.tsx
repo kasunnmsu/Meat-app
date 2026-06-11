@@ -34,18 +34,48 @@ type SealDefinition = {
 
 const BASE_PRICE = 80;
 
-const priceLevels = [
-  {
+const priceLevels = {
+  high: {
+    priceLevel: "high",
     priceIncreasePercent: 20,
     price: 96,
   },
-  {
+  medium: {
+    priceLevel: "medium",
     priceIncreasePercent: 10,
     price: 88,
   },
-  {
+  low: {
+    priceLevel: "low",
     priceIncreasePercent: 5,
     price: 84,
+  },
+};
+
+const priceConditions = [
+  {
+    conditionId: "3.1",
+    prices: [
+      priceLevels.high,
+      priceLevels.medium,
+      priceLevels.low,
+    ],
+  },
+  {
+    conditionId: "3.2",
+    prices: [
+      priceLevels.low,
+      priceLevels.high,
+      priceLevels.medium,
+    ],
+  },
+  {
+    conditionId: "3.3",
+    prices: [
+      priceLevels.medium,
+      priceLevels.low,
+      priceLevels.high,
+    ],
   },
 ];
 
@@ -225,52 +255,92 @@ function getTopThreeSealsFromPreviousChoices() {
     const sessionOneRaw = localStorage.getItem("session-1-ranking");
     const sessionTwoRaw = localStorage.getItem("session-2-ranking");
 
-    const sessionOneRows = sessionOneRaw ? JSON.parse(sessionOneRaw) : [];
-    const sessionTwoRows = sessionTwoRaw ? JSON.parse(sessionTwoRaw) : [];
+    const sessionOneRows = sessionOneRaw
+      ? JSON.parse(sessionOneRaw)
+      : [];
 
-    const allRows = [...sessionOneRows, ...sessionTwoRows];
+    const sessionTwoRows = sessionTwoRaw
+      ? JSON.parse(sessionTwoRaw)
+      : [];
 
-    if (!Array.isArray(allRows) || allRows.length === 0) {
+    if (
+      !Array.isArray(sessionOneRows) ||
+      !Array.isArray(sessionTwoRows) ||
+      (sessionOneRows.length === 0 && sessionTwoRows.length === 0)
+    ) {
       return fallbackTopSeals;
     }
 
-    const totalScores = new Map<string, number>();
-    const session2Scores = new Map<string, number>();
+    const SESSION_1_WEIGHT = 0.33;
+    const SESSION_2_WEIGHT = 0.67;
 
-    for (const row of sessionOneRows) {
-      const sealId = row.seal_id;
-      if (!sealId) continue;
-      const score = Math.max(0, 6 - Number(row.selected_rank || 99));
-      totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
+    const weightedScores = new Map<string, number>();
+    const sessionTwoScores = new Map<string, number>();
+
+    function addWeightedScores(
+      rows: Array<{
+        seal_id?: string;
+        selected_rank?: number | string;
+      }>,
+      weight: number,
+      trackSessionTwo = false
+    ) {
+      for (const row of rows) {
+        const sealId = row.seal_id;
+
+        if (!sealId) continue;
+
+        const selectedRank = Number(row.selected_rank ?? 99);
+
+        // Rank 1 = 5 points, rank 2 = 4, ... rank 5 = 1.
+        const rankScore = Math.max(0, 6 - selectedRank);
+        const weightedScore = rankScore * weight;
+
+        weightedScores.set(
+          sealId,
+          (weightedScores.get(sealId) ?? 0) + weightedScore
+        );
+
+        if (trackSessionTwo) {
+          sessionTwoScores.set(
+            sealId,
+            (sessionTwoScores.get(sealId) ?? 0) + rankScore
+          );
+        }
+      }
     }
 
-    for (const row of sessionTwoRows) {
-      const sealId = row.seal_id;
-      if (!sealId) continue;
-      const score = Math.max(0, 6 - Number(row.selected_rank || 99));
-      totalScores.set(sealId, (totalScores.get(sealId) || 0) + score);
-      session2Scores.set(sealId, (session2Scores.get(sealId) || 0) + score);
-    }
+    addWeightedScores(sessionOneRows, SESSION_1_WEIGHT);
+    addWeightedScores(sessionTwoRows, SESSION_2_WEIGHT, true);
 
-    const topSealIds = Array.from(totalScores.entries())
+    const topSealIds = Array.from(weightedScores.entries())
       .sort((a, b) => {
-        const diff = b[1] - a[1];
-        if (diff !== 0) return diff;
-        return (session2Scores.get(b[0]) || 0) - (session2Scores.get(a[0]) || 0);
+        const weightedDifference = b[1] - a[1];
+
+        if (weightedDifference !== 0) {
+          return weightedDifference;
+        }
+
+        const sessionTwoDifference =
+          (sessionTwoScores.get(b[0]) ?? 0) -
+          (sessionTwoScores.get(a[0]) ?? 0);
+
+        if (sessionTwoDifference !== 0) {
+          return sessionTwoDifference;
+        }
+
+        return a[0].localeCompare(b[0]);
       })
       .map(([sealId]) => sealId)
       .slice(0, 3);
-
-    if (topSealIds.length >= 3) {
-      return topSealIds;
-    }
 
     const missingFallbacks = fallbackTopSeals.filter(
       (sealId) => !topSealIds.includes(sealId)
     );
 
     return [...topSealIds, ...missingFallbacks].slice(0, 3);
-  } catch {
+  } catch (error) {
+    console.error("Could not calculate weighted top seals:", error);
     return fallbackTopSeals;
   }
 }
@@ -335,7 +405,7 @@ export default function SessionThreePage() {
     ? "/images/cuts/14.png"
     : "/images/cuts/13.png";
 
-  const cutTitle = participantLocation === "NMSU" ? "Steak beef" : t("s3.cutTitle");
+  const cutTitle = participantLocation === "NMSU" ? t("s3.cutTitleNmsu") : t("s3.cutTitle");
 
   const randomizationSeed = useMemo(() => {
     return participantId ? `${participantId}-session-3` : "demo-session-3";
@@ -343,41 +413,59 @@ export default function SessionThreePage() {
 
   const allScreensOptions = useMemo(() => {
     const selectedSeals = topThreeSealIds
-      .map((sealId) => sealDefinitions.find((seal) => seal.sealId === sealId))
+      .map((sealId) =>
+        sealDefinitions.find((seal) => seal.sealId === sealId)
+      )
       .filter(Boolean) as SealDefinition[];
 
-    if (selectedSeals.length < 3) return [] as RankingOption[][];
-
-    const screens: RankingOption[][] = [];
-
-    for (let screenIdx = 0; screenIdx < 3; screenIdx++) {
-      const screenOptions: RankingOption[] = selectedSeals.map((seal, sealIdx) => {
-        const priceIdx = (sealIdx + screenIdx) % 3;
-        const priceLevel = priceLevels[priceIdx];
-
-        return {
-          id: `session-3-s${screenIdx + 1}-${seal.sealId}-${priceLevel.priceIncreasePercent}`,
-          cutId: `price-cut-${sealIdx + 1}`,
-          sealId: seal.sealId,
-          title: cutTitle,
-          subtitle: t(seal.nameKey),
-          cutImageUrl,
-          sealImageUrl: seal.sealImageUrl,
-          sealColor: seal.sealColor,
-          price: priceLevel.price,
-          priceIncreasePercent: priceLevel.priceIncreasePercent,
-        };
-      });
-
-      const shuffledOptions = seededShuffle(
-        screenOptions,
-        `${randomizationSeed}-screen-${screenIdx}`
-      );
-      screens.push(shuffledOptions);
+    if (selectedSeals.length < 3) {
+      return [];
     }
 
-    return seededShuffle(screens, `${randomizationSeed}-screen-order`);
-  }, [topThreeSealIds, randomizationSeed, sealDefinitions, cutImageUrl, cutTitle]);
+    const conditionScreens = priceConditions.map((condition) => {
+      const conditionOptions: RankingOption[] = selectedSeals.map(
+        (seal, sealIndex) => {
+          const priceLevel = condition.prices[sealIndex];
+
+          return {
+            id: `session-3-condition-${condition.conditionId}-${seal.sealId}-${priceLevel.priceIncreasePercent}`,
+            cutId: `price-cut-${sealIndex + 1}`,
+            sealId: seal.sealId,
+            title: cutTitle,
+            subtitle: t(seal.nameKey),
+            cutImageUrl,
+            sealImageUrl: seal.sealImageUrl,
+            sealColor: seal.sealColor,
+            price: priceLevel.price,
+            priceIncreasePercent:
+              priceLevel.priceIncreasePercent,
+            priceLevel: priceLevel.priceLevel,
+            conditionId: condition.conditionId,
+          };
+        }
+      );
+
+      return {
+        conditionId: condition.conditionId,
+        options: seededShuffle(
+          conditionOptions,
+          `${randomizationSeed}-condition-${condition.conditionId}`
+        ),
+      };
+    });
+
+    return seededShuffle(
+      conditionScreens,
+      `${randomizationSeed}-condition-order`
+    );
+  }, [
+    topThreeSealIds,
+    randomizationSeed,
+    sealDefinitions,
+    cutImageUrl,
+    cutTitle,
+    t,
+  ]);
 
   function getSealById(sealId?: string) {
     return sealDefinitions.find((seal) => seal.sealId === sealId) || null;
@@ -415,8 +503,12 @@ export default function SessionThreePage() {
         session_number: 3,
         method: "3 cuts x 3 prices price experiment with 3 screens",
         base_price_brl: BASE_PRICE,
+        session_1_weight: 0.33,
+        session_2_weight: 0.67,
         randomization_seed: randomizationSeed,
-        screen_number: screenIdx + 1,
+        presentation_screen_number: screenIdx + 1,
+        condition_id:
+          allScreensOptions[screenIdx]?.conditionId || "",
         selected_rank: rankIdx + 1,
         option_id: option.id,
         cut_id: option.cutId || "",
@@ -428,6 +520,19 @@ export default function SessionThreePage() {
         seal_color: option.sealColor || "",
         price_brl: option.price || "",
         price_increase_percent: option.priceIncreasePercent || "",
+        screen_started_at: option.screenStartedAt ?? "",
+        option_selected_at: option.optionSelectedAt ?? "",
+        purchase_confirmed_at: option.purchaseConfirmedAt ?? "",
+        time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs ?? "",
+        time_spent_before_choice_seconds:
+          option.timeSpentBeforeChoiceSeconds ?? "",
+        time_taken_to_confirm_ms: option.timeTakenToConfirmMs ?? "",
+        time_taken_to_confirm_seconds:
+          option.timeTakenToConfirmSeconds ?? "",
+        changed_preference_before_confirming:
+          option.changedPreferenceBeforeConfirming ?? "",
+        initial_selected_option_id: option.initialSelectedOptionId ?? "",
+        final_confirmed_option_id: option.finalConfirmedOptionId ?? "",
         top_three_seals_used: topThreeSealIds.join(", "),
         gender: demographics.gender,
         age_group: demographics.ageGroup,
@@ -443,6 +548,8 @@ export default function SessionThreePage() {
       session_number: 3,
       method: "3 cuts x 3 prices price experiment with 3 screens",
       base_price_brl: BASE_PRICE,
+      session_1_weight: 0.33,
+      session_2_weight: 0.67,
       randomization_seed: randomizationSeed,
 
       top_seal_1: topThreeSealIds[0] || "",
@@ -459,6 +566,10 @@ export default function SessionThreePage() {
 
     screenRankings.forEach((ranking, screenIdx) => {
       const screenNum = screenIdx + 1;
+
+      participantRow[`screen_${screenNum}_condition_id`] =
+        allScreensOptions[screenIdx]?.conditionId || "";
+
       ranking.forEach((option, rankIdx) => {
         const rankNum = rankIdx + 1;
         const prefix = `screen_${screenNum}_rank_${rankNum}`;
@@ -469,6 +580,27 @@ export default function SessionThreePage() {
         participantRow[`${prefix}_price_brl`] = option.price ?? "";
         participantRow[`${prefix}_price_increase_percent`] =
           option.priceIncreasePercent ?? "";
+
+        participantRow[`${prefix}_screen_started_at`] =
+          option.screenStartedAt ?? "";
+        participantRow[`${prefix}_option_selected_at`] =
+          option.optionSelectedAt ?? "";
+        participantRow[`${prefix}_purchase_confirmed_at`] =
+          option.purchaseConfirmedAt ?? "";
+        participantRow[`${prefix}_time_spent_before_choice_ms`] =
+          option.timeSpentBeforeChoiceMs ?? "";
+        participantRow[`${prefix}_time_spent_before_choice_seconds`] =
+          option.timeSpentBeforeChoiceSeconds ?? "";
+        participantRow[`${prefix}_time_taken_to_confirm_ms`] =
+          option.timeTakenToConfirmMs ?? "";
+        participantRow[`${prefix}_time_taken_to_confirm_seconds`] =
+          option.timeTakenToConfirmSeconds ?? "";
+        participantRow[`${prefix}_changed_preference_before_confirming`] =
+          option.changedPreferenceBeforeConfirming ?? "";
+        participantRow[`${prefix}_initial_selected_option_id`] =
+          option.initialSelectedOptionId ?? "";
+        participantRow[`${prefix}_final_confirmed_option_id`] =
+          option.finalConfirmedOptionId ?? "";
       });
     });
 
@@ -515,11 +647,12 @@ export default function SessionThreePage() {
           </section>
         )}
 
-        {step === "ranking" && allScreensOptions[currentScreenIndex] && (
+        {step === "ranking" &&
+          allScreensOptions[currentScreenIndex]?.options && (
           <section className="session-three-ranking">
             <RankingScreen
               key={`${participantLocation}-screen-${currentScreenIndex}`}
-              options={allScreensOptions[currentScreenIndex]}
+              options={allScreensOptions[currentScreenIndex].options}
               sessionNumber={3}
               sessionSuffix={`${t("s3.choiceSuffix")} ${currentScreenIndex + 1} ${t("s3.choiceOf")} 3`}
               title={t("s3.rankingTitle")}

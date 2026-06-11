@@ -1,16 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useLanguage } from "@/lib/i18n";
 
 const locations = ["PUCPR", "UFBA", "NMSU"];
-
-const locationColors: Record<string, string> = {
-  PUCPR: "#bb0b0b",
-  UFBA: "#1a7a3a",
-  NMSU: "#bb0b0b",
-};
 
 function createParticipantId(location: string) {
   const prefix = location.replace(/\s+/g, "").toUpperCase();
@@ -47,18 +41,6 @@ function ParticipantStartContent() {
   const isFullSurvey = mode === "survey";
 
   const [location, setLocation] = useState("PUCPR");
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
   const [participantId, setParticipantId] = useState("");
   const [existingParticipantId, setExistingParticipantId] = useState("");
   const [useExistingId, setUseExistingId] = useState(false);
@@ -99,7 +81,6 @@ function ParticipantStartContent() {
 
     setUseExistingId(true);
     setParticipantId(cleanId);
-
     saveParticipant(cleanId);
   }
 
@@ -123,7 +104,6 @@ function ParticipantStartContent() {
       clearPreviousParticipantData();
 
       id = createParticipantId(location);
-
       setParticipantId(id);
       saveParticipant(id);
     }
@@ -131,100 +111,73 @@ function ParticipantStartContent() {
     router.push(getDestination());
   }
 
-
   return (
-    <main className="home-page">
-      <a href="/" className="back-btn-red" style={{ background: locationColors[location] ?? "#bb0b0b" }}>{t("start.back")}</a>
-      <div className="home-illustration">
-        <div className="home-card start-card-wide">
-          <label className="form-group">
-            <span>{t("start.location")}</span>
-            <div
-              ref={dropdownRef}
-              className="custom-select"
-              style={{ borderColor: locationColors[location] ?? "#bb0b0b" }}
-            >
-              <button
-                type="button"
-                className="custom-select-trigger"
-                onClick={() => setDropdownOpen((o) => !o)}
-              >
-                <span style={{ color: locationColors[location] ?? "#bb0b0b", fontWeight: 700 }}>{location}</span>
-                <span className="custom-select-arrow" style={{ color: locationColors[location] ?? "#bb0b0b" }}>▾</span>
-              </button>
+    <main className="start-page">
+      <section className="start-card">
+        <a href="/" className="back-link">
+          {t("start.back")}
+        </a>
 
-              {dropdownOpen && (
-                <ul className="custom-select-menu">
-                  {locations.map((item) => (
-                    <li key={item}>
-                      <button
-                        type="button"
-                        className={`custom-select-option${item === location ? " custom-select-option--active" : ""}`}
-                        style={item === location ? { background: locationColors[item], color: "#fff" } : undefined}
-                        onMouseEnter={(e) => {
-                          if (item !== location) (e.currentTarget as HTMLButtonElement).style.background = locationColors[item] + "22";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (item !== location) (e.currentTarget as HTMLButtonElement).style.background = "";
-                        }}
-                        onClick={() => { setLocation(item); setDropdownOpen(false); }}
-                      >
-                        {item}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </label>
+        <label className="form-group">
+          <span>{t("start.location")}</span>
 
-          <div className="start-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleGenerateId}
-            >
-              {t("start.createId")}
-            </button>
+          <select
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+          >
+            {locations.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
 
-            <button
-              type="button"
-              className="home-primary-btn"
-              style={{ background: locationColors[location] ?? "#bb0b0b" }}
-              onClick={handleContinue}
-            >
-              {t("start.continue")}
-            </button>
-          </div>
+        <div className="start-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleGenerateId}
+          >
+            {t("start.createId")}
+          </button>
 
-          {participantId && (
-            <div className="participant-id-box">
-              <span>{t("start.currentId")}</span>
-              <strong>{participantId}</strong>
-            </div>
-          )}
-
-          <div className="existing-id-box">
-            <h2>{t("start.existingTitle")}</h2>
-            <p>
-              {t("start.existingDesc")}
-            </p>
-            <input
-              type="text"
-              value={existingParticipantId}
-              onChange={(event) => setExistingParticipantId(event.target.value)}
-              placeholder={t("start.idPlaceholder")}
-            />
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={handleUseExistingId}
-            >
-              {t("start.useId")}
-            </button>
-          </div>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={handleContinue}
+          >
+            {t("start.continue")}
+          </button>
         </div>
-      </div>
+
+        {participantId && (
+          <div className="participant-id-box">
+            <span>{t("start.currentId")}</span>
+            <strong>{participantId}</strong>
+          </div>
+        )}
+
+        <div className="existing-id-box">
+          <h2>{t("start.existingTitle")}</h2>
+          <p>{t("start.existingDesc")}</p>
+
+          <input
+            type="text"
+            value={existingParticipantId}
+            onChange={(event) => setExistingParticipantId(event.target.value)}
+            placeholder={t("start.idPlaceholder")}
+          />
+
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleUseExistingId}
+          >
+            {t("start.useId")}
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
@@ -233,10 +186,10 @@ export default function ParticipantStartPage() {
   return (
     <Suspense
       fallback={
-        <main className="home-page">
-          <div className="home-illustration">
-            <p>Carregando...</p>
-          </div>
+        <main className="start-page">
+          <section className="start-card">
+            <p>Loading...</p>
+          </section>
         </main>
       }
     >
