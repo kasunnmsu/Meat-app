@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import RankingScreen, { RankingOption } from "@/components/RankingScreen";
+import RankingScreen, { ClickLogRow, RankingOption } from "@/components/RankingScreen";
 import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
 import { seededShuffle } from "@/lib/randomization";
@@ -354,6 +354,7 @@ export default function SessionThreePage() {
   const [topThreeSealIds, setTopThreeSealIds] = useState<string[]>(fallbackTopSeals);
   const [currentScreenIndex, setCurrentScreenIndex] = useState(0);
   const [screenRankings, setScreenRankings] = useState<RankingOption[][]>([]);
+  const [screenClickLogs, setScreenClickLogs] = useState<ClickLogRow[][]>([]);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const advancingRef = useRef(false);
 
@@ -471,9 +472,15 @@ export default function SessionThreePage() {
     return sealDefinitions.find((seal) => seal.sealId === sealId) || null;
   }
 
-  function handleRankingComplete(ranking: RankingOption[]) {
+  function handleRankingComplete(
+    ranking: RankingOption[],
+    clickLogs: ClickLogRow[] = []
+  ) {
     const newRankings = [...screenRankings, ranking];
+    const newClickLogs = [...screenClickLogs, clickLogs];
+
     setScreenRankings(newRankings);
+    setScreenClickLogs(newClickLogs);
 
     advancingRef.current = false;
     setIsAdvancing(false);
@@ -604,10 +611,31 @@ export default function SessionThreePage() {
       });
     });
 
+    const clickRows = screenClickLogs.flatMap((screenRows, screenIdx) =>
+      screenRows.map((row) => ({
+        ...row,
+        participant_id: participantId,
+        location: participantLocation,
+        session_number: 3,
+        presentation_screen_number: screenIdx + 1,
+        condition_id:
+          allScreensOptions[screenIdx]?.conditionId ||
+          row.condition_id ||
+          "",
+        timestamp,
+      }))
+    );
+
     const sessionResult = await saveWithRetry("/api/session-3/save", {
       participantRow,
       longRows,
     });
+
+    if (clickRows.length > 0) {
+      await saveWithRetry("/api/click-logs/save", {
+        clickRows,
+      });
+    }
 
     localStorage.setItem("session-3-ranking", JSON.stringify(longRows));
     localStorage.setItem("session-3-demographics", JSON.stringify(demographics));
@@ -658,6 +686,7 @@ export default function SessionThreePage() {
               title={t("s3.rankingTitle")}
               description={t("s3.rankingDesc")}
               location={participantLocation}
+              participantId={participantId}
               showPriceInCart
               onRankingComplete={handleRankingComplete}
               onSealClick={(sealId) => {

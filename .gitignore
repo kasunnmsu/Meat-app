@@ -2,3 +2,7 @@ node_modules
 .next
 .env
 .claude
+
+# Local study output data
+data/*.json
+data/*.xlsx

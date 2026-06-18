@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import RankingScreen, { RankingOption } from "@/components/RankingScreen";
+import RankingScreen, { ClickLogRow, RankingOption } from "@/components/RankingScreen";
 import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
 import { seededShuffle } from "@/lib/randomization";
@@ -272,6 +272,7 @@ export default function SessionTwoDescriptionsPage() {
   const [sealReadingRecords, setSealReadingRecords] = useState<SealReadingRecord[]>([]);
   const [activeSeal, setActiveSeal] = useState<SealInfo | null>(null);
   const [completedRanking, setCompletedRanking] = useState<RankingOption[]>([]);
+  const [rankingClickLogs, setRankingClickLogs] = useState<ClickLogRow[]>([]);
   const [agreedToDescriptions, setAgreedToDescriptions] = useState("");
   const [isSavingFinal, setIsSavingFinal] = useState(false);
   const [zoomedSealId, setZoomedSealId] = useState<string | null>(null);
@@ -349,8 +350,12 @@ export default function SessionTwoDescriptionsPage() {
     setStep("reading");
   }
 
-  function handleRankingComplete(ranking: RankingOption[]) {
+  function handleRankingComplete(
+    ranking: RankingOption[],
+    clickLogs: ClickLogRow[] = []
+  ) {
     setCompletedRanking(ranking);
+    setRankingClickLogs(clickLogs);
     setStep("final-confirmation");
   }
 
@@ -377,6 +382,7 @@ export default function SessionTwoDescriptionsPage() {
 
   function handleFinalConfirmationNo() {
     setCompletedRanking([]);
+    setRankingClickLogs([]);
     setStep("ranking");
   }
 
@@ -493,12 +499,26 @@ export default function SessionTwoDescriptionsPage() {
 
     addRankingTimingFields(participantRow, completedRanking);
 
-  const result = await saveWithRetry("/api/session-2/save", {
+  const clickRows = rankingClickLogs.map((row) => ({
+      ...row,
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      timestamp,
+    }));
+
+    const result = await saveWithRetry("/api/session-2/save", {
       participantRow,
       longRows,
       sealReadingRows,
       rankingSealClickRows,
     });
+
+    if (clickRows.length > 0) {
+      await saveWithRetry("/api/click-logs/save", {
+        clickRows,
+      });
+    }
 
     localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
     localStorage.setItem("session-2-seal-readings", JSON.stringify(sealReadingRows));
@@ -619,12 +639,26 @@ export default function SessionTwoDescriptionsPage() {
 
     addRankingTimingFields(participantRow, completedRanking);
 
-  const result = await saveWithRetry("/api/session-2/save", {
+  const clickRows = rankingClickLogs.map((row) => ({
+      ...row,
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 2,
+      timestamp,
+    }));
+
+    const result = await saveWithRetry("/api/session-2/save", {
       participantRow,
       longRows,
       sealReadingRows,
       rankingSealClickRows,
     });
+
+    if (clickRows.length > 0) {
+      await saveWithRetry("/api/click-logs/save", {
+        clickRows,
+      });
+    }
 
     localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
     localStorage.setItem("session-2-demographics", JSON.stringify(demographics));
@@ -750,6 +784,7 @@ export default function SessionTwoDescriptionsPage() {
               title={t("s2.rankingTitle")}
               description={t("s2.rankingDesc")}
               location={participantLocation}
+              participantId={participantId}
               onRankingComplete={handleRankingComplete}
               onSealClick={(sealId) => {
                 const seal = getSealById(sealId);
