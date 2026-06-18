@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import RankingScreen, { RankingOption } from "@/components/RankingScreen";
+import RankingScreen, { ClickLogRow, RankingOption } from "@/components/RankingScreen";
 import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
 import { seededShuffle } from "@/lib/randomization";
@@ -83,6 +83,7 @@ export default function SessionOnePage() {
   const [participantId, setParticipantId] = useState("");
   const [participantLocation, setParticipantLocation] = useState("");
   const [completedRanking, setCompletedRanking] = useState<RankingOption[]>([]);
+  const [rankingClickLogs, setRankingClickLogs] = useState<ClickLogRow[]>([]);
   const [step, setStep] = useState<Step>("ranking");
   const [isSavingFinal, setIsSavingFinal] = useState(false);
   const [zoomedSealId, setZoomedSealId] = useState<string | null>(null);
@@ -125,8 +126,12 @@ export default function SessionOnePage() {
 
   
 
-  function handleRankingComplete(ranking: RankingOption[]) {
+  function handleRankingComplete(
+    ranking: RankingOption[],
+    clickLogs: ClickLogRow[] = []
+  ) {
     setCompletedRanking(ranking);
+    setRankingClickLogs(clickLogs);
     setStep("final-confirmation");
   }
 
@@ -153,6 +158,7 @@ export default function SessionOnePage() {
 
   function handleFinalConfirmationNo() {
     setCompletedRanking([]);
+    setRankingClickLogs([]);
     setStep("ranking");
   }
 
@@ -236,10 +242,24 @@ export default function SessionOnePage() {
 
     addRankingTimingFields(participantRow, completedRanking);
 
-  const result = await saveWithRetry("/api/session-1/save", {
+  const clickRows = rankingClickLogs.map((row) => ({
+      ...row,
+      participant_id: participantId,
+      location: participantLocation,
+      session_number: 1,
+      timestamp,
+    }));
+
+    const result = await saveWithRetry("/api/session-1/save", {
       participantRow,
       longRows,
     });
+
+    if (clickRows.length > 0) {
+      await saveWithRetry("/api/click-logs/save", {
+        clickRows,
+      });
+    }
 
     localStorage.setItem("session-1-ranking", JSON.stringify(longRows));
 
@@ -347,6 +367,7 @@ export default function SessionOnePage() {
             title={t("s1.rankingTitle")}
             description={t("s1.rankingDesc")}
             location={participantLocation}
+            participantId={participantId}
             sealZoom={true}
             onRankingComplete={handleRankingComplete}
           />
