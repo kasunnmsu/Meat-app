@@ -1,4 +1,4 @@
-import { RankingOption } from "@/components/RankingScreen";
+import type { RankingOption } from "@/components/RankingScreen";
 
 // Session 1 options for PUCPR
 const SESSION_1_OPTIONS_PUCPR: RankingOption[] = [
@@ -91,9 +91,9 @@ const SESSION_1_OPTIONS_UFBA: RankingOption[] = [
     cutId: "cut-4",
     sealId: "green-2",
     title: "Picanha bovina",
-    subtitle: "Orgânica",
+    subtitle: "Cultivada",
     cutImageUrl: "/images/cuts/12.png",
-    sealImageUrl: "/images/seals/ufba/o.png",
+    sealImageUrl: "/images/seals/ufba/cc.png",
     sealColor: "green",
   },
   {
@@ -101,9 +101,9 @@ const SESSION_1_OPTIONS_UFBA: RankingOption[] = [
     cutId: "cut-5",
     sealId: "green-3",
     title: "Picanha bovina",
-    subtitle: "Cultivada",
+    subtitle: "Orgânica",
     cutImageUrl: "/images/cuts/12.png",
-    sealImageUrl: "/images/seals/ufba/cc.png",
+    sealImageUrl: "/images/seals/ufba/o.png",
     sealColor: "green",
   },
 ];
@@ -199,9 +199,9 @@ const SESSION_2_OPTIONS_UFBA: RankingOption[] = [
     cutId: "cut-4",
     sealId: "green-2",
     title: "Picanha bovina",
-    subtitle: "Orgânica",
+    subtitle: "Cultivada",
     cutImageUrl: "/images/cuts/12.png",
-    sealImageUrl: "/images/seals/ufba/o.png",
+    sealImageUrl: "/images/seals/ufba/cc.png",
     sealColor: "green",
   },
   {
@@ -209,9 +209,9 @@ const SESSION_2_OPTIONS_UFBA: RankingOption[] = [
     cutId: "cut-5",
     sealId: "green-3",
     title: "Picanha bovina",
-    subtitle: "Cultivada",
+    subtitle: "Orgânica",
     cutImageUrl: "/images/cuts/12.png",
-    sealImageUrl: "/images/seals/ufba/cc.png",
+    sealImageUrl: "/images/seals/ufba/o.png",
     sealColor: "green",
   },
 ];
@@ -327,20 +327,48 @@ const SESSION_2_OPTIONS_NMSU: RankingOption[] = [
 export type LocationConfig = {
   session1Options: RankingOption[];
   session2Options: RankingOption[];
+  language: "pt-BR" | "en";
+  locale: "pt-BR" | "en-US";
+  currencyCode: "BRL" | "USD";
+  currencySymbol: "R$" | "$";
+  unit: "kg" | "lb";
+  priceUnit: "/ kg" | "/ lb";
+  basePrice: number;
 };
 
 const LOCATION_CONFIGS: Record<string, LocationConfig> = {
   PUCPR: {
     session1Options: SESSION_1_OPTIONS_PUCPR,
     session2Options: SESSION_2_OPTIONS_PUCPR,
+    language: "pt-BR",
+    locale: "pt-BR",
+    currencyCode: "BRL",
+    currencySymbol: "R$",
+    unit: "kg",
+    priceUnit: "/ kg",
+    basePrice: 85,
   },
   UFBA: {
     session1Options: SESSION_1_OPTIONS_UFBA,
     session2Options: SESSION_2_OPTIONS_UFBA,
+    language: "pt-BR",
+    locale: "pt-BR",
+    currencyCode: "BRL",
+    currencySymbol: "R$",
+    unit: "kg",
+    priceUnit: "/ kg",
+    basePrice: 80,
   },
   NMSU: {
     session1Options: SESSION_1_OPTIONS_NMSU,
     session2Options: SESSION_2_OPTIONS_NMSU,
+    language: "en",
+    locale: "en-US",
+    currencyCode: "USD",
+    currencySymbol: "$",
+    unit: "lb",
+    priceUnit: "/ lb",
+    basePrice: 20,
   },
 };
 

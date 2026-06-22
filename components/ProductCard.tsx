@@ -11,6 +11,19 @@ const locationColors: Record<string, string> = {
   NMSU: "#bb0b0b",
 };
 
+function formatOptionPrice(option: RankingOption) {
+  if (typeof option.price !== "number") {
+    return "";
+  }
+
+  const value = option.price.toLocaleString(option.priceLocale || "pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `${option.priceCurrencySymbol || option.priceCurrency || "R$"} ${value} ${option.priceUnitLabel || option.priceUnit || "/ kg"}`;
+}
+
 type ProductCardProps = {
   option: RankingOption;
   displayedPosition: number;
@@ -83,7 +96,7 @@ export default function ProductCard({
 
 {typeof option.price === "number" && (
           <strong>
-            {t("ranking.currency")} {option.price.toFixed(2).replace(".", ",")} {t("ranking.perKg")}
+            {formatOptionPrice(option)}
           </strong>
         )}
       </div>

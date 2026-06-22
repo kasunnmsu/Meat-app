@@ -33,15 +33,11 @@ function getSealNameKey(
   }
 
   if (sealId === "green-2") {
-    return location === "UFBA"
-      ? "seal.organic.short"
-      : "seal.cultivated.short";
+    return "seal.cultivated.short";
   }
 
   if (sealId === "green-3") {
-    return location === "UFBA"
-      ? "seal.cultivated.short"
-      : "seal.organic.short";
+    return "seal.organic.short";
   }
 
   return "seal.traditional.short";
