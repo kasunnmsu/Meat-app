@@ -1,11 +1,84 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/i18n";
+import { getLocationConfig } from "@/lib/locations";
+
+const locations = ["PUCPR", "UFBA", "NMSU"];
+
+const locationColors: Record<string, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
+};
+
+function createParticipantId(location: string) {
+  const prefix = location.replace(/\s+/g, "").toUpperCase();
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase();
+
+  return `${prefix}-${Date.now()}-${random}`;
+}
+
+function clearPreviousParticipantData() {
+  localStorage.removeItem("participantId");
+  localStorage.removeItem("participantLocation");
+  localStorage.removeItem("surveyMode");
+  localStorage.removeItem("surveyStartedAt");
+  localStorage.removeItem("selectedSessionPath");
+
+  localStorage.removeItem("session-1-ranking");
+  localStorage.removeItem("session-1-demographics");
+
+  localStorage.removeItem("session-2-ranking");
+  localStorage.removeItem("session-2-demographics");
+  localStorage.removeItem("session-2-seal-readings");
+
+  localStorage.removeItem("session-3-ranking");
+  localStorage.removeItem("session-3-demographics");
+}
 
 export default function HomePage() {
-  const { t, setLanguage, language } = useLanguage();
+  const router = useRouter();
+  const { t, setLanguage } = useLanguage();
+  const [location, setLocation] = useState("PUCPR");
+  const [participantId, setParticipantId] = useState("");
+
+  useEffect(() => {
+    setLanguage(getLocationConfig(location).language);
+  }, [location]);
+
+  function saveParticipant(id: string) {
+    localStorage.setItem("participantId", id);
+    localStorage.setItem("participantLocation", location);
+    localStorage.setItem("surveyMode", "full");
+    localStorage.setItem("surveyStartedAt", new Date().toISOString());
+    localStorage.setItem("selectedSessionPath", "/session-1");
+  }
+
+  function handleCreateUser() {
+    clearPreviousParticipantData();
+
+    const id = createParticipantId(location);
+    setParticipantId(id);
+    saveParticipant(id);
+  }
+
+  function handleEnter() {
+    let id = participantId;
+
+    if (!id) {
+      clearPreviousParticipantData();
+      id = createParticipantId(location);
+      setParticipantId(id);
+      saveParticipant(id);
+    }
+
+    router.push("/session-1");
+  }
+
+  const actionColor = locationColors[location] ?? "#bb0b0b";
 
   return (
     <main className="home-page">
@@ -17,37 +90,45 @@ export default function HomePage() {
         </div>
 
         <div className="home-card">
-          <Link href="/participant/start?mode=survey" className="home-primary-btn">
-            <span>{t("home.enter")}</span>
-          </Link>
+          <h1>{t("home.welcome")}</h1>
 
-          <div className="home-divider">
-            <span>{t("home.isolated")}</span>
-          </div>
+          <label className="home-location-field">
+            <span>{t("start.location")}</span>
 
-          <div className="home-secondary-actions">
-            <Link href="/participant/start?next=/session-1">{t("home.session1")}</Link>
-            <Link href="/participant/start?next=/session-2/descriptions">{t("home.session2")}</Link>
-            <Link href="/participant/start?next=/session-3">{t("home.session3")}</Link>
-          </div>
-        </div>
+            <select
+              value={location}
+              onChange={(event) => setLocation(event.target.value)}
+            >
+              {locations.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
 
-        <div className="home-flags">
           <button
             type="button"
-            className={`home-flag-btn${language === "pt-BR" ? " home-flag-btn--active" : ""}`}
-            onClick={() => setLanguage("pt-BR")}
+            className="home-secondary-btn"
+            onClick={handleCreateUser}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://flagcdn.com/w80/br.png" alt="Brasil" className="home-flag-img" width={80} height={53} />
+            {t("home.createUser")}
           </button>
+
+          {participantId && (
+            <div className="participant-id-box">
+              <span>{t("start.currentId")}</span>
+              <strong>{participantId}</strong>
+            </div>
+          )}
+
           <button
             type="button"
-            className={`home-flag-btn${language === "en" ? " home-flag-btn--active" : ""}`}
-            onClick={() => setLanguage("en")}
+            className="home-primary-btn"
+            style={{ background: actionColor }}
+            onClick={handleEnter}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="https://flagcdn.com/w80/us.png" alt="United States" className="home-flag-img" width={80} height={53} />
+            <span>{t("home.enter")}</span>
           </button>
         </div>
       </div>

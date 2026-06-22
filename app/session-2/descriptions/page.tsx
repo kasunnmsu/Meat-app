@@ -121,16 +121,6 @@ const SEALS_UFBA: SealInfo[] = [
   },
   {
     id: "green-2",
-    name: "Certificação Orgânica",
-    color: "green",
-    imageUrl: "/images/seals/ufba/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.full",
-    descKey: "seal.organic.desc",
-  },
-  {
-    id: "green-3",
     name: "Certificação Carne Cultivada",
     color: "green",
     imageUrl: "/images/seals/ufba/cc.png",
@@ -138,6 +128,16 @@ const SEALS_UFBA: SealInfo[] = [
       "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
     nameKey: "seal.cultivated.full",
     descKey: "seal.cultivated.desc",
+  },
+  {
+    id: "green-3",
+    name: "Certificação Orgânica",
+    color: "green",
+    imageUrl: "/images/seals/ufba/o.png",
+    description:
+      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
+    nameKey: "seal.organic.full",
+    descKey: "seal.organic.desc",
   },
 ];
 
@@ -217,15 +217,11 @@ function getSealNameKey(
   }
 
   if (sealId === "green-2") {
-    return location === "UFBA"
-      ? "seal.organic.short"
-      : "seal.cultivated.short";
+    return "seal.cultivated.short";
   }
 
   if (sealId === "green-3") {
-    return location === "UFBA"
-      ? "seal.cultivated.short"
-      : "seal.organic.short";
+    return "seal.organic.short";
   }
 
   return "seal.traditional.short";
@@ -296,6 +292,13 @@ export default function SessionTwoDescriptionsPage() {
     return seededShuffle(baseOptions, randomizationSeed);
   }, [randomizationSeed, participantLocation]);
 
+  const randomizedReadingSeals = useMemo(() => {
+    return seededShuffle(
+      seals,
+      `${participantId || "demo"}-${participantLocation || "unknown"}-session-2-seal-reading`
+    );
+  }, [seals, participantId, participantLocation]);
+
 
   const translatedOptions = useMemo(() => {
     const translatedCutTitle =
@@ -329,7 +332,7 @@ export default function SessionTwoDescriptionsPage() {
         ...current,
         {
           sealId: seal.id,
-          sealName: seal.name,
+          sealName: t(seal.nameKey),
           openedAt: new Date().toISOString(),
         },
       ]);
@@ -709,7 +712,7 @@ export default function SessionTwoDescriptionsPage() {
             </div>
 
             <div className="seal-description-grid">
-              {seals.map((seal) => {
+              {randomizedReadingSeals.map((seal) => {
                 const wasRead = readSealIds.includes(seal.id);
 
                 return (
@@ -791,7 +794,7 @@ export default function SessionTwoDescriptionsPage() {
                 if (seal) {
                   openSealDescription(seal);
                   setRankingSealClicks((prev) => ({ ...prev, [seal.id]: (prev[seal.id] || 0) + 1 }));
-                  setRankingSealClickRecords((prev) => [...prev, { sealId: seal.id, sealName: seal.name, clickedAt: new Date().toISOString() }]);
+                  setRankingSealClickRecords((prev) => [...prev, { sealId: seal.id, sealName: t(seal.nameKey), clickedAt: new Date().toISOString() }]);
                 }
               }}
               clickedSealIds={new Set(Object.keys(rankingSealClicks))}

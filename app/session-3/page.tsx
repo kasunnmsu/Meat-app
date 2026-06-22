@@ -7,6 +7,7 @@ import DemographicsForm, { DemographicsData } from "@/components/DemographicsFor
 import { seededShuffle } from "@/lib/randomization";
 import { saveWithRetry } from "@/lib/saveWithRetry";
 import { useLanguage, TranslationKey } from "@/lib/i18n";
+import { getLocationConfig } from "@/lib/locations";
 
 type Step =
   | "transition"
@@ -32,23 +33,18 @@ type SealDefinition = {
   descKey: TranslationKey;
 };
 
-const BASE_PRICE = 80;
-
-const priceLevels = {
+const PRICE_LEVELS = {
   high: {
     priceLevel: "high",
     priceIncreasePercent: 20,
-    price: 96,
   },
   medium: {
     priceLevel: "medium",
     priceIncreasePercent: 10,
-    price: 88,
   },
   low: {
     priceLevel: "low",
     priceIncreasePercent: 5,
-    price: 84,
   },
 };
 
@@ -56,28 +52,32 @@ const priceConditions = [
   {
     conditionId: "3.1",
     prices: [
-      priceLevels.high,
-      priceLevels.medium,
-      priceLevels.low,
+      PRICE_LEVELS.high,
+      PRICE_LEVELS.medium,
+      PRICE_LEVELS.low,
     ],
   },
   {
     conditionId: "3.2",
     prices: [
-      priceLevels.low,
-      priceLevels.high,
-      priceLevels.medium,
+      PRICE_LEVELS.low,
+      PRICE_LEVELS.high,
+      PRICE_LEVELS.medium,
     ],
   },
   {
     conditionId: "3.3",
     prices: [
-      priceLevels.medium,
-      priceLevels.low,
-      priceLevels.high,
+      PRICE_LEVELS.medium,
+      PRICE_LEVELS.low,
+      PRICE_LEVELS.high,
     ],
   },
 ];
+
+function calculatePrice(basePrice: number, increasePercent: number) {
+  return Number((basePrice * (1 + increasePercent / 100)).toFixed(2));
+}
 
 const SEAL_DEFINITIONS_PUCPR: SealDefinition[] = [
   {
@@ -165,16 +165,6 @@ const SEAL_DEFINITIONS_UFBA: SealDefinition[] = [
   },
   {
     sealId: "green-2",
-    sealName: "Orgânica",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.short",
-    descKey: "seal.organic.desc",
-  },
-  {
-    sealId: "green-3",
     sealName: "Cultivada",
     sealColor: "green",
     sealImageUrl: "/images/seals/ufba/cc.png",
@@ -182,6 +172,16 @@ const SEAL_DEFINITIONS_UFBA: SealDefinition[] = [
       "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
     nameKey: "seal.cultivated.short",
     descKey: "seal.cultivated.desc",
+  },
+  {
+    sealId: "green-3",
+    sealName: "Orgânica",
+    sealColor: "green",
+    sealImageUrl: "/images/seals/ufba/o.png",
+    description:
+      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
+    nameKey: "seal.organic.short",
+    descKey: "seal.organic.desc",
   },
 ];
 
@@ -408,6 +408,11 @@ export default function SessionThreePage() {
 
   const cutTitle = participantLocation === "NMSU" ? t("s3.cutTitleNmsu") : t("s3.cutTitle");
 
+  const priceConfig = useMemo(
+    () => getLocationConfig(participantLocation),
+    [participantLocation]
+  );
+
   const randomizationSeed = useMemo(() => {
     return participantId ? `${participantId}-session-3` : "demo-session-3";
   }, [participantId]);
@@ -427,6 +432,10 @@ export default function SessionThreePage() {
       const conditionOptions: RankingOption[] = selectedSeals.map(
         (seal, sealIndex) => {
           const priceLevel = condition.prices[sealIndex];
+          const price = calculatePrice(
+            priceConfig.basePrice,
+            priceLevel.priceIncreasePercent
+          );
 
           return {
             id: `session-3-condition-${condition.conditionId}-${seal.sealId}-${priceLevel.priceIncreasePercent}`,
@@ -437,7 +446,12 @@ export default function SessionThreePage() {
             cutImageUrl,
             sealImageUrl: seal.sealImageUrl,
             sealColor: seal.sealColor,
-            price: priceLevel.price,
+            price,
+            priceCurrency: priceConfig.currencyCode,
+            priceCurrencySymbol: priceConfig.currencySymbol,
+            priceUnit: priceConfig.unit,
+            priceUnitLabel: priceConfig.priceUnit,
+            priceLocale: priceConfig.locale,
             priceIncreasePercent:
               priceLevel.priceIncreasePercent,
             priceLevel: priceLevel.priceLevel,
@@ -465,6 +479,7 @@ export default function SessionThreePage() {
     sealDefinitions,
     cutImageUrl,
     cutTitle,
+    priceConfig,
     t,
   ]);
 
@@ -509,7 +524,11 @@ export default function SessionThreePage() {
         location: participantLocation,
         session_number: 3,
         method: "3 cuts x 3 prices price experiment with 3 screens",
-        base_price_brl: BASE_PRICE,
+        base_price: priceConfig.basePrice,
+        base_price_brl:
+          priceConfig.currencyCode === "BRL" ? priceConfig.basePrice : "",
+        base_price_currency: priceConfig.currencyCode,
+        base_price_unit: priceConfig.unit,
         session_1_weight: 0.33,
         session_2_weight: 0.67,
         randomization_seed: randomizationSeed,
@@ -525,7 +544,11 @@ export default function SessionThreePage() {
         cut_image_url: option.cutImageUrl || "",
         seal_image_url: option.sealImageUrl || "",
         seal_color: option.sealColor || "",
-        price_brl: option.price || "",
+        price: option.price || "",
+        price_brl:
+          option.priceCurrency === "BRL" ? option.price || "" : "",
+        price_currency: option.priceCurrency || "",
+        price_unit: option.priceUnit || "",
         price_increase_percent: option.priceIncreasePercent || "",
         screen_started_at: option.screenStartedAt ?? "",
         option_selected_at: option.optionSelectedAt ?? "",
@@ -554,7 +577,11 @@ export default function SessionThreePage() {
       location: participantLocation,
       session_number: 3,
       method: "3 cuts x 3 prices price experiment with 3 screens",
-      base_price_brl: BASE_PRICE,
+      base_price: priceConfig.basePrice,
+      base_price_brl:
+        priceConfig.currencyCode === "BRL" ? priceConfig.basePrice : "",
+      base_price_currency: priceConfig.currencyCode,
+      base_price_unit: priceConfig.unit,
       session_1_weight: 0.33,
       session_2_weight: 0.67,
       randomization_seed: randomizationSeed,
@@ -584,7 +611,12 @@ export default function SessionThreePage() {
         participantRow[`${prefix}_seal_id`] = option.sealId || "";
         participantRow[`${prefix}_title`] = option.title;
         participantRow[`${prefix}_subtitle`] = option.subtitle || "";
-        participantRow[`${prefix}_price_brl`] = option.price ?? "";
+        participantRow[`${prefix}_price_brl`] =
+          option.priceCurrency === "BRL" ? option.price ?? "" : "";
+        participantRow[`${prefix}_price`] = option.price ?? "";
+        participantRow[`${prefix}_price_currency`] =
+          option.priceCurrency ?? "";
+        participantRow[`${prefix}_price_unit`] = option.priceUnit ?? "";
         participantRow[`${prefix}_price_increase_percent`] =
           option.priceIncreasePercent ?? "";
 

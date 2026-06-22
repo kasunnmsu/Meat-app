@@ -27,33 +27,33 @@ export default function DemographicsForm({ onSubmit, locationColor }: Demographi
   const isComplete = gender && ageGroup && educationLevel && incomeGroup;
 
   const genderOptions: { key: TranslationKey; value: string }[] = [
-    { key: "demo.male", value: "Masculino" },
-    { key: "demo.female", value: "Feminino" },
-    { key: "demo.noSay", value: "Prefiro não informar" },
+    { key: "demo.male", value: "male" },
+    { key: "demo.female", value: "female" },
+    { key: "demo.noSay", value: "prefer_not_to_say" },
   ];
 
   const ageOptions: { key: TranslationKey; value: string }[] = [
-    { key: "demo.age1", value: "18–24 anos" },
-    { key: "demo.age2", value: "25–34 anos" },
-    { key: "demo.age3", value: "35–44 anos" },
-    { key: "demo.age4", value: "45–59 anos" },
-    { key: "demo.age5", value: "60 anos ou mais" },
+    { key: "demo.age1", value: "age_18_24" },
+    { key: "demo.age2", value: "age_25_34" },
+    { key: "demo.age3", value: "age_35_44" },
+    { key: "demo.age4", value: "age_45_59" },
+    { key: "demo.age5", value: "age_60_plus" },
   ];
 
   const educationOptions: { key: TranslationKey; value: string }[] = [
-    { key: "demo.edu1", value: "Sem escolaridade ou ensino fundamental incompleto" },
-    { key: "demo.edu2", value: "Ensino fundamental completo ou ensino médio incompleto" },
-    { key: "demo.edu3", value: "Ensino médio completo ou ensino superior incompleto" },
-    { key: "demo.edu4", value: "Ensino superior completo" },
-    { key: "demo.edu5", value: "Pós-graduação, mestrado ou doutorado" },
+    { key: "demo.edu1", value: "less_than_high_school" },
+    { key: "demo.edu2", value: "high_school_or_ged" },
+    { key: "demo.edu3", value: "some_college_or_associate" },
+    { key: "demo.edu4", value: "bachelor" },
+    { key: "demo.edu5", value: "graduate" },
   ];
 
   const incomeOptions: { key: TranslationKey; value: string }[] = [
-    { key: "demo.inc1", value: "Até 1 salário mínimo — até R$ 1.621" },
-    { key: "demo.inc2", value: "De 1 a 2 salários mínimos — R$ 1.621 a R$ 3.242" },
-    { key: "demo.inc3", value: "De 2 a 5 salários mínimos — R$ 3.242 a R$ 8.105" },
-    { key: "demo.inc4", value: "De 5 a 10 salários mínimos — R$ 8.105 a R$ 16.210" },
-    { key: "demo.inc5", value: "Mais de 10 salários mínimos — acima de R$ 16.210" },
+    { key: "demo.inc1", value: "income_1" },
+    { key: "demo.inc2", value: "income_2" },
+    { key: "demo.inc3", value: "income_3" },
+    { key: "demo.inc4", value: "income_4" },
+    { key: "demo.inc5", value: "income_5" },
   ];
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -171,3 +171,4 @@ export default function DemographicsForm({ onSubmit, locationColor }: Demographi
     </form>
   );
 }
+

@@ -7,12 +7,14 @@ export type Language = "pt-BR" | "en";
 const dictionary = {
   "pt-BR": {
     "home.enter": "Entrar",
+    "home.welcome": "Bem-vindo(a)",
+    "home.createUser": "Criar novo usuário",
     "home.isolated": "testes das sessões isoladas",
     "home.session1": "Sessão 1",
     "home.session2": "Sessão 2",
     "home.session3": "Sessão 3",
 
-    "start.location": "Local do estudo",
+    "start.location": "Local do estudo / Study Location",
     "start.createId": "Criar Novo ID de Participante",
     "start.continue": "Continuar",
     "start.currentId": "ID do Participante Atual",
@@ -141,7 +143,7 @@ const dictionary = {
     "demo.edu4": "Ensino superior completo",
     "demo.edu5": "Pós-graduação, mestrado ou doutorado",
     "demo.income": "Perfil econômico",
-    "demo.inc1": "Até 1 salário mínimo — até R$ 1.621",
+    "demo.inc1": "Até 1 salário mínimo — R$ 0 até R$ 1.621",
     "demo.inc2": "De 1 a 2 salários mínimos — R$ 1.621 a R$ 3.242",
     "demo.inc3": "De 2 a 5 salários mínimos — R$ 3.242 a R$ 8.105",
     "demo.inc4": "De 5 a 10 salários mínimos — R$ 8.105 a R$ 16.210",
@@ -167,12 +169,14 @@ const dictionary = {
   },
   en: {
     "home.enter": "Enter",
+    "home.welcome": "Welcome",
+    "home.createUser": "Create new user",
     "home.isolated": "isolated session tests",
     "home.session1": "Session 1",
     "home.session2": "Session 2",
     "home.session3": "Session 3",
 
-    "start.location": "Study location",
+    "start.location": "Local do estudo / Study Location",
     "start.createId": "Create New Participant ID",
     "start.continue": "Continue",
     "start.currentId": "Current Participant ID",

@@ -20,6 +20,9 @@ export type ClickLogRow = {
   rank_number?: number | string;
   condition_id?: string;
   price_brl?: number | string;
+  price?: number | string;
+  price_currency?: string;
+  price_unit?: string;
   price_increase_percent?: number | string;
   x_position: number | string;
   y_position: number | string;
@@ -39,6 +42,11 @@ export type RankingOption = {
   sealImageUrl?: string;
   sealColor?: string;
   price?: number;
+  priceCurrency?: string;
+  priceCurrencySymbol?: string;
+  priceUnit?: string;
+  priceUnitLabel?: string;
+  priceLocale?: string;
   priceIncreasePercent?: number;
   priceLevel?: string;
   conditionId?: string;
@@ -81,6 +89,19 @@ const locationColors: Record<string, string> = {
   UFBA: "#1a7a3a",
   NMSU: "#bb0b0b",
 };
+
+function formatOptionPrice(option: RankingOption) {
+  if (typeof option.price !== "number") {
+    return "";
+  }
+
+  const value = option.price.toLocaleString(option.priceLocale || "pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+  return `${option.priceCurrencySymbol || option.priceCurrency || "R$"} ${value} ${option.priceUnitLabel || option.priceUnit || "/ kg"}`;
+}
 
 export default function RankingScreen({
   options,
@@ -155,7 +176,13 @@ export default function RankingScreen({
       seal_id: details.option?.sealId || "",
       rank_number: details.rankNumber ?? currentRank,
       condition_id: details.option?.conditionId || "",
-      price_brl: details.option?.price ?? "",
+      price_brl:
+        details.option?.priceCurrency === "BRL"
+          ? details.option?.price ?? ""
+          : "",
+      price: details.option?.price ?? "",
+      price_currency: details.option?.priceCurrency ?? "",
+      price_unit: details.option?.priceUnit ?? "",
       price_increase_percent: details.option?.priceIncreasePercent ?? "",
       x_position: event?.clientX ?? "",
       y_position: event?.clientY ?? "",
@@ -473,9 +500,7 @@ export default function RankingScreen({
                     {showPriceInCart &&
                       typeof option.price === "number" && (
                         <span className="cart-item-price">
-                          {t("ranking.currency")}{" "}
-                          {option.price.toFixed(2).replace(".", ",")}{" "}
-                          {t("ranking.perKg")}
+                          {formatOptionPrice(option)}
                         </span>
                       )}
                   </div>
