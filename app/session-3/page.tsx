@@ -702,7 +702,7 @@ export default function SessionThreePage() {
             <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s3.choiceSuffix")} {screenRankings.length} {t("s3.choiceOf")} 3 {t("s3.betweenBadge")}</div>
             <h2>{t("s3.betweenTitle")}</h2>
             <p>
-              {t("s3.betweenDesc1")} {screenRankings.length}. {t("s3.betweenDesc2")}
+              {t("s3.betweenDesc1")} {screenRankings.length} {t("s3.betweenDesc2")}
             </p>
 
             <button

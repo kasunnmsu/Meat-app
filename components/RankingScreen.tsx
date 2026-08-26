@@ -362,7 +362,7 @@ export default function RankingScreen({
         <div>
           <p>
             {t("common.session")} {sessionNumber}
-            {sessionSuffix ? ` · ${sessionSuffix}` : ""}
+            {sessionSuffix ? `. ${sessionSuffix}` : ""}
           </p>
 
           <h2>
