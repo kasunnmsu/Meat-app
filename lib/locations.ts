@@ -1,5 +1,17 @@
 import type { RankingOption } from "@/components/RankingScreen";
 
+export const STUDY_LOCATIONS = ["PUCPR", "UFBA", "NMSU"] as const;
+
+export type StudyLocation = (typeof STUDY_LOCATIONS)[number];
+
+export const DEFAULT_LOCATION: StudyLocation = "PUCPR";
+
+const LOCATION_COLORS: Record<StudyLocation, string> = {
+  PUCPR: "#bb0b0b",
+  UFBA: "#1a7a3a",
+  NMSU: "#bb0b0b",
+};
+
 // Session 1 options for PUCPR
 const SESSION_1_OPTIONS_PUCPR: RankingOption[] = [
   {
@@ -373,9 +385,11 @@ const LOCATION_CONFIGS: Record<string, LocationConfig> = {
 };
 
 export function getLocationConfig(location: string): LocationConfig {
-  return (
-    LOCATION_CONFIGS[location] || LOCATION_CONFIGS["PUCPR"]
-  );
+  return LOCATION_CONFIGS[location] || LOCATION_CONFIGS[DEFAULT_LOCATION];
+}
+
+export function getLocationColor(location: string) {
+  return LOCATION_COLORS[location as StudyLocation] || LOCATION_COLORS[DEFAULT_LOCATION];
 }
 
 export function getSession1Options(location: string): RankingOption[] {

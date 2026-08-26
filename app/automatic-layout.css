@@ -1,0 +1,359 @@
+/* Applied only after the moderator selects the automatic device profile. */
+
+html[data-layout-profile="automatic"],
+html[data-layout-profile="automatic"] body {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+html[data-layout-profile="automatic"] :where(
+  button,
+  select,
+  input:not([type="radio"]):not([type="checkbox"]),
+  a.primary-link-button
+) {
+  min-height: 48px;
+}
+
+html[data-layout-profile="automatic"] .location-pucpr {
+  --automatic-location-accent: #bb0b0b;
+  --automatic-location-soft: #f8e4e4;
+  --automatic-location-border: #ead8d8;
+}
+
+html[data-layout-profile="automatic"] .location-ufba {
+  --automatic-location-accent: #1a7a3a;
+  --automatic-location-soft: #cfead8;
+  --automatic-location-border: #d8e7dc;
+}
+
+html[data-layout-profile="automatic"] .study-page {
+  min-height: var(--automatic-viewport-height, 100svh);
+  padding:
+    max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
+}
+
+html[data-layout-profile="automatic"] .study-shell {
+  min-height: calc(var(--automatic-viewport-height, 100svh) - 28px);
+}
+
+html[data-layout-profile="automatic"] .ranking-area,
+html[data-layout-profile="automatic"] .complete-card,
+html[data-layout-profile="automatic"] .session-two-card {
+  width: 100%;
+  padding: clamp(14px, 4vw, 26px);
+  border-radius: clamp(18px, 5vw, 28px);
+}
+
+html[data-layout-profile="automatic"] .ranking-toolbar {
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+html[data-layout-profile="automatic"] .ranking-toolbar h2,
+html[data-layout-profile="automatic"] .complete-card h2,
+html[data-layout-profile="automatic"] .session-two-heading h2,
+html[data-layout-profile="automatic"] .form-intro h2 {
+  font-size: clamp(21px, 6vw, 30px);
+  line-height: 1.15;
+}
+
+html[data-layout-profile="automatic"] .ranking-toolbar p,
+html[data-layout-profile="automatic"] .complete-card p,
+html[data-layout-profile="automatic"] .session-two-heading p,
+html[data-layout-profile="automatic"] .form-intro p {
+  width: auto;
+  height: auto;
+  font-size: clamp(15px, 4vw, 18px);
+  line-height: 1.4;
+}
+
+html[data-layout-profile="automatic"] .ranking-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+html[data-layout-profile="automatic"] .product-grid {
+  gap: 12px;
+}
+
+html[data-layout-profile="automatic"] .product-card {
+  min-width: 0;
+  min-height: 0;
+  padding: 10px;
+}
+
+html[data-layout-profile="automatic"] .product-image-box {
+  height: clamp(155px, 42vw, 210px);
+}
+
+html[data-layout-profile="automatic"] .product-info {
+  min-width: 0;
+  margin-top: 0;
+  padding: 8px 4px;
+}
+
+html[data-layout-profile="automatic"] .product-info h3 {
+  font-size: clamp(18px, 5vw, 22px);
+}
+
+html[data-layout-profile="automatic"] .product-info p,
+html[data-layout-profile="automatic"] .product-info strong {
+  font-size: clamp(15px, 4.2vw, 18px);
+}
+
+html[data-layout-profile="automatic"] .select-button,
+html[data-layout-profile="automatic"] .primary-button,
+html[data-layout-profile="automatic"] .secondary-button,
+html[data-layout-profile="automatic"] .purchase-button,
+html[data-layout-profile="automatic"] .cart-complete-button {
+  padding: 13px 14px;
+  font-size: clamp(15px, 4vw, 18px);
+  white-space: normal;
+}
+
+html[data-layout-profile="automatic"] .selection-cart {
+  position: static;
+  width: 100%;
+  padding: 16px;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .selection-cart {
+  border-color: #1a1a1a;
+  background: #ffffff;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .selection-cart .cart-item {
+  border: 1px solid var(--automatic-location-border);
+  background: #ffffff;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .cart-rank {
+  background: var(--automatic-location-soft);
+  color: #000000;
+}
+
+html[data-layout-profile="automatic"] .cart-item,
+html[data-layout-profile="automatic"] .cart-list--reorderable .cart-item {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+html[data-layout-profile="automatic"] .modal-backdrop {
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+html[data-layout-profile="automatic"] .modal-card {
+  max-height: calc(var(--automatic-viewport-height, 100svh) - 24px);
+  margin-top: 0;
+  padding: clamp(16px, 5vw, 28px);
+  border-radius: 20px;
+}
+
+html[data-layout-profile="automatic"] .modal-card h2 {
+  font-size: clamp(22px, 6vw, 30px);
+}
+
+html[data-layout-profile="automatic"] .modal-card p {
+  font-size: clamp(15px, 4vw, 18px);
+}
+
+html[data-layout-profile="automatic"] .demographics-form {
+  gap: 14px;
+}
+
+html[data-layout-profile="automatic"] .demographics-form fieldset,
+html[data-layout-profile="automatic"] .demographics-form fieldset:first-of-type {
+  gap: 8px;
+  margin-top: 0;
+  padding: 14px;
+  border-radius: 18px;
+}
+
+html[data-layout-profile="automatic"] .demographics-form label {
+  align-items: center;
+  min-height: 0;
+  padding: 9px 11px;
+  line-height: 1.35;
+}
+
+html[data-layout-profile="automatic"] .demographics-form input[type="radio"],
+html[data-layout-profile="automatic"] .demographics-form input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin-top: 0;
+}
+
+html[data-layout-profile="automatic"] .session-two-heading {
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+html[data-layout-profile="automatic"] .seal-description-grid {
+  gap: 10px;
+}
+
+html[data-layout-profile="automatic"] .seal-description-card {
+  padding: 10px;
+}
+
+html[data-layout-profile="automatic"] .seal-image-holder {
+  height: clamp(120px, 35vw, 190px);
+}
+
+html[data-layout-profile="automatic"] .final-ranking-list li {
+  min-width: 0;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .final-confirmation-card {
+  border-color: #1a1a1a;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .final-ranking-list li {
+  border-color: var(--automatic-location-border);
+  background: #ffffff;
+}
+
+html[data-layout-profile="automatic"] :is(.location-pucpr, .location-ufba) .final-ranking-list li > strong {
+  background: var(--automatic-location-soft) !important;
+  color: #000000;
+}
+
+html[data-layout-profile="automatic"] .final-seal-zoom-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+  top: -7px;
+  right: 0;
+}
+
+html[data-layout-profile="automatic"] .final-seal-img {
+  position: static;
+  width: 34px;
+  height: 38px;
+}
+
+@media (max-width: 540px) {
+  html[data-layout-profile="automatic"] .home-page {
+    min-height: var(--automatic-viewport-height, 100svh);
+    overflow-y: auto;
+  }
+
+  html[data-layout-profile="automatic"] .home-illustration {
+    min-height: var(--automatic-viewport-height, 100svh);
+    padding: 54px 14px 24px;
+  }
+
+  html[data-layout-profile="automatic"] .home-logos {
+    gap: 10px;
+  }
+
+  html[data-layout-profile="automatic"] .home-logo-pucpr,
+  html[data-layout-profile="automatic"] .home-logo-ufba {
+    width: min(29vw, 112px);
+  }
+
+  html[data-layout-profile="automatic"] .home-logo-nmsu {
+    width: min(17vw, 62px);
+  }
+
+  html[data-layout-profile="automatic"] .home-card {
+    padding: 20px 16px;
+  }
+
+  html[data-layout-profile="automatic"] .home-card h1 {
+    font-size: 27px;
+  }
+
+  html[data-layout-profile="automatic"] .product-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 430px;
+    margin-inline: auto;
+  }
+
+  html[data-layout-profile="automatic"] .seal-overlay-image,
+  html[data-layout-profile="automatic"] .product-card--pucpr .seal-overlay-image,
+  html[data-layout-profile="automatic"] .product-card--ufba .seal-overlay-image,
+  html[data-layout-profile="automatic"] .product-card--nmsu .seal-overlay-image {
+    width: 92px;
+    height: 68px;
+    top: 0;
+    right: 0;
+  }
+
+  html[data-layout-profile="automatic"] .cut-image,
+  html[data-layout-profile="automatic"] .cut-image--ufba {
+    width: 100%;
+    height: 100%;
+  }
+
+  html[data-layout-profile="automatic"] .selection-cart {
+    display: none;
+  }
+
+  html[data-layout-profile="automatic"] .selection-cart--complete {
+    display: block;
+  }
+
+  html[data-layout-profile="automatic"] .final-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html[data-layout-profile="automatic"] .final-ranking-list li {
+    grid-template-columns: 44px 92px minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px;
+  }
+
+  html[data-layout-profile="automatic"] .final-ranking-images {
+    width: 92px;
+    height: 66px;
+  }
+
+  html[data-layout-profile="automatic"] .final-cut-img {
+    width: 96px;
+    height: 64px;
+  }
+
+  html[data-layout-profile="automatic"] .seal-description-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 541px) and (max-width: 900px) {
+  html[data-layout-profile="automatic"] .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html[data-layout-profile="automatic"] .seal-description-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  html[data-layout-profile="automatic"] .study-page {
+    padding-block: 10px;
+  }
+
+  html[data-layout-profile="automatic"] .product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html[data-layout-profile="automatic"] .product-image-box {
+    height: 145px;
+  }
+
+  html[data-layout-profile="automatic"] .modal-card {
+    max-width: min(620px, calc(100vw - 24px));
+  }
+}

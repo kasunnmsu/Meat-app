@@ -1,28 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { RankingOption } from "@/components/RankingScreen";
 import { useLanguage } from "@/lib/i18n";
-
-const locationColors: Record<string, string> = {
-  PUCPR: "#bb0b0b",
-  UFBA: "#1a7a3a",
-  NMSU: "#bb0b0b",
-};
-
-function formatOptionPrice(option: RankingOption) {
-  if (typeof option.price !== "number") {
-    return "";
-  }
-
-  const value = option.price.toLocaleString(option.priceLocale || "pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  return `${option.priceCurrencySymbol || option.priceCurrency || "R$"} ${value} ${option.priceUnitLabel || option.priceUnit || "/ kg"}`;
-}
+import { getLocationColor } from "@/lib/locations";
+import { formatOptionPrice } from "@/lib/formatOptionPrice";
 
 type ProductCardProps = {
   option: RankingOption;
@@ -31,6 +14,8 @@ type ProductCardProps = {
   sealZoom?: boolean;
   onSelect: () => void;
   onSealClick?: () => void;
+  onSealZoomOpen?: () => void;
+  onSealZoomClose?: () => void;
 };
 
 export default function ProductCard({
@@ -39,9 +24,32 @@ export default function ProductCard({
   sealZoom,
   onSelect,
   onSealClick,
+  onSealZoomOpen,
+  onSealZoomClose,
 }: ProductCardProps) {
   const [isZoomed, setIsZoomed] = useState(false);
+  const sealButtonRef = useRef<HTMLButtonElement | null>(null);
   const { t } = useLanguage();
+
+  useEffect(() => {
+    if (!isZoomed) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (sealButtonRef.current?.contains(event.target as Node)) {
+        return;
+      }
+
+      setIsZoomed(false);
+      onSealZoomClose?.();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [isZoomed, onSealZoomClose]);
+
   return (
     <article className={`product-card${location ? ` product-card--${location.toLowerCase()}` : ""}`}>
       <div className="product-image-box meat-seal-display">
@@ -68,14 +76,22 @@ export default function ProductCard({
         {option.sealImageUrl && (
           <button
             type="button"
+            ref={sealButtonRef}
             className={sealZoom ? "seal-click-button seal-zoom-trigger" : "seal-click-button"}
             onClick={(event) => {
               event.stopPropagation();
               if (sealZoom) {
-                setIsZoomed((prev) => !prev);
+                if (isZoomed) {
+                  setIsZoomed(false);
+                  onSealZoomClose?.();
+                } else {
+                  onSealClick?.();
+                  setIsZoomed(true);
+                  onSealZoomOpen?.();
+                }
                 return;
               }
-              if (onSealClick) onSealClick();
+              onSealClick?.();
             }}
             aria-label={`Ler descrição do selo ${option.title}`}
           >
@@ -105,7 +121,7 @@ export default function ProductCard({
         type="button"
         onClick={onSelect}
         className="select-button"
-        style={{ background: locationColors[location ?? ""] ?? "#2f4f2f" }}
+        style={{ background: location ? getLocationColor(location) : "#2f4f2f" }}
       >
         {t("ranking.selectBtn")}
       </button>

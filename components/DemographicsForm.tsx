@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLanguage, TranslationKey } from "@/lib/i18n";
 
 export type DemographicsData = {
@@ -13,16 +13,39 @@ export type DemographicsData = {
 type DemographicsFormProps = {
   onSubmit: (data: DemographicsData) => void | Promise<void>;
   locationColor?: string;
+  initialData?: Partial<DemographicsData>;
+  onProgressChange?: (data: DemographicsData) => void;
 };
 
-export default function DemographicsForm({ onSubmit, locationColor }: DemographicsFormProps) {
+export default function DemographicsForm({
+  onSubmit,
+  locationColor,
+  initialData,
+  onProgressChange,
+}: DemographicsFormProps) {
   const { t } = useLanguage();
-  const [gender, setGender] = useState("");
-  const [ageGroup, setAgeGroup] = useState("");
-  const [educationLevel, setEducationLevel] = useState("");
-  const [incomeGroup, setIncomeGroup] = useState("");
+  const [gender, setGender] = useState(initialData?.gender ?? "");
+  const [ageGroup, setAgeGroup] = useState(initialData?.ageGroup ?? "");
+  const [educationLevel, setEducationLevel] = useState(
+    initialData?.educationLevel ?? ""
+  );
+  const [incomeGroup, setIncomeGroup] = useState(initialData?.incomeGroup ?? "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const onProgressChangeRef = useRef(onProgressChange);
+
+  useEffect(() => {
+    onProgressChangeRef.current = onProgressChange;
+  }, [onProgressChange]);
+
+  useEffect(() => {
+    onProgressChangeRef.current?.({
+      gender,
+      ageGroup,
+      educationLevel,
+      incomeGroup,
+    });
+  }, [ageGroup, educationLevel, gender, incomeGroup]);
 
   const isComplete = gender && ageGroup && educationLevel && incomeGroup;
 
