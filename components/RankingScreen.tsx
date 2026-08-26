@@ -1,10 +1,18 @@
-"use client";
+﻿"use client";
 
-import { useState, type MouseEvent } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import ProductCard from "@/components/ProductCard";
+import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import ConfirmModal from "@/components/ConfirmModal";
+import RankingProductGrid from "@/components/RankingProductGrid";
+import RankingSelectionCart from "@/components/RankingSelectionCart";
 import { useLanguage, TranslationKey } from "@/lib/i18n";
+import { getLocationColor } from "@/lib/locations";
+import type {
+  DecisionAttemptRecord,
+  PreselectionReorderRecord,
+  RankingTrackingData,
+  RankingSnapshotItem,
+  SealInteractionRecord,
+} from "@/lib/sessionTracking";
 
 export type ClickLogRow = {
   participant_id?: string;
@@ -18,6 +26,8 @@ export type ClickLogRow = {
   option_id?: string;
   seal_id?: string;
   rank_number?: number | string;
+  from_rank?: number | string;
+  to_rank?: number | string;
   condition_id?: string;
   price_brl?: number | string;
   price?: number | string;
@@ -64,6 +74,36 @@ export type RankingOption = {
   changedPreferenceBeforeConfirming?: string;
   initialSelectedOptionId?: string;
   finalConfirmedOptionId?: string;
+  decisionSequence?: number;
+  productSelectionTimeMs?: number;
+  confirmationTimeMs?: number;
+  decisionTimeMs?: number;
+  confirmationAttempts?: number;
+  rejectedConfirmations?: number;
+  rejectedProducts?: string;
+};
+
+export type RankingProgressDraft = {
+  selectedRanking: RankingOption[];
+  clickLogs: ClickLogRow[];
+  pendingOption: RankingOption | null;
+  screenStartedAt: string;
+  optionSelectedAt: string | null;
+  selectionSegmentStartedAt: string;
+  currentSelectionSegmentMs: number;
+  accumulatedSelectionTimeMs: number;
+  accumulatedConfirmationTimeMs: number;
+  confirmationAttempts: number;
+  rejectedConfirmations: number;
+  rejectedProducts: string[];
+  rankingStartedAt: string;
+  decisionAttempts: DecisionAttemptRecord[];
+  sealInteractions: SealInteractionRecord[];
+  reviewStartedAt: string | null;
+  reviewInitialRanking: RankingSnapshotItem[];
+  reviewReorders: PreselectionReorderRecord[];
+  initialSelectedOptionId: string;
+  preferenceChanged: boolean;
 };
 
 type RankingScreenProps = {
@@ -71,36 +111,31 @@ type RankingScreenProps = {
   sessionNumber: number;
   sessionSuffix?: string;
   title?: string;
+  progressLabel?: string;
   description?: string;
   location?: string;
   participantId?: string;
+  showSessionLabel?: boolean;
   sealZoom?: boolean;
   showPriceInCart?: boolean;
-  clickedSealIds?: Set<string>;
+  initialRanking?: RankingOption[];
+  initialClickLogs?: ClickLogRow[];
+  initialTracking?: RankingTrackingData;
+  initialProgress?: RankingProgressDraft;
+  onProgressChange?: (progress: RankingProgressDraft) => void;
   onRankingComplete: (
     ranking: RankingOption[],
-    clickLogs?: ClickLogRow[]
+    clickLogs?: ClickLogRow[],
+    tracking?: RankingTrackingData
   ) => void;
   onSealClick?: (sealId?: string) => void;
 };
 
-const locationColors: Record<string, string> = {
-  PUCPR: "#bb0b0b",
-  UFBA: "#1a7a3a",
-  NMSU: "#bb0b0b",
-};
-
-function formatOptionPrice(option: RankingOption) {
-  if (typeof option.price !== "number") {
-    return "";
-  }
-
-  const value = option.price.toLocaleString(option.priceLocale || "pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  return `${option.priceCurrencySymbol || option.priceCurrency || "R$"} ${value} ${option.priceUnitLabel || option.priceUnit || "/ kg"}`;
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
 }
 
 export default function RankingScreen({
@@ -108,29 +143,167 @@ export default function RankingScreen({
   sessionNumber,
   sessionSuffix,
   title,
+  progressLabel,
   description,
   location,
   participantId,
+  showSessionLabel = true,
   sealZoom,
   showPriceInCart,
-  clickedSealIds,
+  initialRanking = [],
+  initialClickLogs = [],
+  initialTracking,
+  initialProgress,
+  onProgressChange,
   onRankingComplete,
   onSealClick,
 }: RankingScreenProps) {
   const { t } = useLanguage();
+  const restoredRanking = initialProgress?.selectedRanking ?? initialRanking;
+  const restoredClickLogs = initialProgress?.clickLogs ?? initialClickLogs;
+  const restoredScreenStartedAt = initialProgress?.screenStartedAt
+    ? new Date(initialProgress.screenStartedAt)
+    : new Date();
 
-  const [availableOptions, setAvailableOptions] = useState(options);
-  const [selectedRanking, setSelectedRanking] = useState<RankingOption[]>([]);
-  const [pendingOption, setPendingOption] = useState<RankingOption | null>(null);
-  const [clickLogs, setClickLogs] = useState<ClickLogRow[]>([]);
+  const [availableOptions, setAvailableOptions] = useState(() => {
+    const selectedIds = new Set(restoredRanking.map((option) => option.id));
+    return options.filter((option) => !selectedIds.has(option.id));
+  });
+  const [selectedRanking, setSelectedRanking] = useState<RankingOption[]>(restoredRanking);
+  const [pendingOption, setPendingOption] = useState<RankingOption | null>(
+    initialProgress?.pendingOption ?? null
+  );
+  const [clickLogs, setClickLogs] = useState<ClickLogRow[]>(restoredClickLogs);
+  const [draggedCartOptionId, setDraggedCartOptionId] = useState<string | null>(null);
+  const [dragDirection, setDragDirection] = useState<"up" | "down" | null>(null);
+  const draggedCartOptionIdRef = useRef<string | null>(null);
+  const selectedRankingRef = useRef<RankingOption[]>(restoredRanking);
+  const dragStartRankRef = useRef<number | null>(null);
+  const isReorderEnabled = location === "PUCPR" || location === "UFBA";
+  const tracksRankingReview = isReorderEnabled;
+  const isRevisionCycle = Boolean(
+    tracksRankingReview &&
+      initialTracking?.finalConfirmationAttempts?.at(-1)?.response === "No"
+  );
 
-  const [screenStartedAt, setScreenStartedAt] = useState(() => new Date());
-  const [optionSelectedAt, setOptionSelectedAt] = useState<Date | null>(null);
+  const [screenStartedAt, setScreenStartedAt] = useState(restoredScreenStartedAt);
+  const [optionSelectedAt, setOptionSelectedAt] = useState<Date | null>(
+    initialProgress?.optionSelectedAt
+      ? new Date(initialProgress.optionSelectedAt)
+      : null
+  );
+  const selectionSegmentStartedAtRef = useRef(
+    initialProgress?.selectionSegmentStartedAt
+      ? new Date(initialProgress.selectionSegmentStartedAt)
+      : restoredScreenStartedAt
+  );
+  const currentSelectionSegmentMsRef = useRef(
+    initialProgress?.currentSelectionSegmentMs ?? 0
+  );
+  const accumulatedSelectionTimeMsRef = useRef(
+    initialProgress?.accumulatedSelectionTimeMs ?? 0
+  );
+  const accumulatedConfirmationTimeMsRef = useRef(
+    initialProgress?.accumulatedConfirmationTimeMs ?? 0
+  );
+  const confirmationAttemptsRef = useRef(
+    initialProgress?.confirmationAttempts ?? 0
+  );
+  const rejectedConfirmationsRef = useRef(
+    initialProgress?.rejectedConfirmations ?? 0
+  );
+  const rejectedProductsRef = useRef<string[]>([
+    ...(initialProgress?.rejectedProducts ?? []),
+  ]);
+  const rankingStartedAtRef = useRef(
+    initialProgress?.rankingStartedAt ||
+      initialTracking?.rankingStartedAt ||
+      restoredScreenStartedAt.toISOString()
+  );
+  const decisionAttemptsRef = useRef<DecisionAttemptRecord[]>([
+    ...(initialProgress?.decisionAttempts ?? initialTracking?.decisionAttempts ?? []),
+  ]);
+  const sealInteractionsRef = useRef<SealInteractionRecord[]>([
+    ...(initialProgress?.sealInteractions ?? initialTracking?.sealInteractions ?? []),
+  ]);
+  const openSealTimesRef = useRef(new Map<string, Date>());
+  const currentReviewStartedAtRef = useRef<Date | null>(
+    initialProgress?.reviewStartedAt
+      ? new Date(initialProgress.reviewStartedAt)
+      : restoredRanking.length === options.length
+        ? restoredScreenStartedAt
+        : null
+  );
+  const currentReviewInitialRankingRef = useRef<RankingSnapshotItem[]>(
+    initialProgress?.reviewInitialRanking ??
+    (restoredRanking.length === options.length
+      ? restoredRanking.map((option) => ({
+          optionId: option.id,
+          sealId: option.sealId || "",
+          choiceName: option.subtitle || option.title,
+        }))
+      : [])
+  );
+  const currentReviewReordersRef = useRef<PreselectionReorderRecord[]>([
+    ...(initialProgress?.reviewReorders ?? []),
+  ]);
 
-  const [initialSelectedOptionId, setInitialSelectedOptionId] = useState("");
-  const [preferenceChanged, setPreferenceChanged] = useState(false);
+  const [initialSelectedOptionId, setInitialSelectedOptionId] = useState(
+    initialProgress?.initialSelectedOptionId ?? ""
+  );
+  const [preferenceChanged, setPreferenceChanged] = useState(
+    initialProgress?.preferenceChanged ?? false
+  );
+  const [progressRevision, setProgressRevision] = useState(0);
+  const onProgressChangeRef = useRef(onProgressChange);
+
+  useEffect(() => {
+    onProgressChangeRef.current = onProgressChange;
+  }, [onProgressChange]);
+
+  useEffect(() => {
+    onProgressChangeRef.current?.({
+      selectedRanking,
+      clickLogs,
+      pendingOption,
+      screenStartedAt: screenStartedAt.toISOString(),
+      optionSelectedAt: optionSelectedAt?.toISOString() ?? null,
+      selectionSegmentStartedAt: selectionSegmentStartedAtRef.current.toISOString(),
+      currentSelectionSegmentMs: currentSelectionSegmentMsRef.current,
+      accumulatedSelectionTimeMs: accumulatedSelectionTimeMsRef.current,
+      accumulatedConfirmationTimeMs: accumulatedConfirmationTimeMsRef.current,
+      confirmationAttempts: confirmationAttemptsRef.current,
+      rejectedConfirmations: rejectedConfirmationsRef.current,
+      rejectedProducts: [...rejectedProductsRef.current],
+      rankingStartedAt: rankingStartedAtRef.current,
+      decisionAttempts: [...decisionAttemptsRef.current],
+      sealInteractions: [...sealInteractionsRef.current],
+      reviewStartedAt: currentReviewStartedAtRef.current?.toISOString() ?? null,
+      reviewInitialRanking: [...currentReviewInitialRankingRef.current],
+      reviewReorders: [...currentReviewReordersRef.current],
+      initialSelectedOptionId,
+      preferenceChanged,
+    });
+  }, [
+    clickLogs,
+    initialSelectedOptionId,
+    optionSelectedAt,
+    pendingOption,
+    preferenceChanged,
+    progressRevision,
+    screenStartedAt,
+    selectedRanking,
+  ]);
 
   const currentRank = selectedRanking.length + 1;
+
+  function createRankingSnapshot(ranking: RankingOption[]) {
+    return ranking.map((option) => ({
+      optionId: option.id,
+      sealId: option.sealId || "",
+      choiceName: option.subtitle || option.title,
+    }));
+  }
 
   const stepKeys: TranslationKey[] = [
     "ranking.step1",
@@ -209,11 +382,59 @@ export default function RankingScreen({
     return row;
   }
 
+  function makeCartReorderLog(
+    option: RankingOption,
+    fromRank: number,
+    toRank: number,
+    clientX: number,
+    clientY: number
+  ): ClickLogRow {
+    return {
+      participant_id: participantId || "",
+      location: location || "",
+      session_number: sessionNumber,
+      session_suffix: sessionSuffix || "",
+      screen_name: `session-${sessionNumber}-ranking`,
+      event_type: "selected_ranking_reorder_drag",
+      element_id: option.id,
+      element_label: `${option.title}${option.subtitle ? ` - ${option.subtitle}` : ""}`,
+      option_id: option.id,
+      seal_id: option.sealId || "",
+      rank_number: toRank,
+      from_rank: fromRank,
+      to_rank: toRank,
+      condition_id: option.conditionId || "",
+      price_brl:
+        option.priceCurrency === "BRL"
+          ? option.price ?? ""
+          : "",
+      price: option.price ?? "",
+      price_currency: option.priceCurrency ?? "",
+      price_unit: option.priceUnit ?? "",
+      price_increase_percent: option.priceIncreasePercent ?? "",
+      x_position: clientX,
+      y_position: clientY,
+      viewport_width:
+        typeof window !== "undefined" ? window.innerWidth : "",
+      viewport_height:
+        typeof window !== "undefined" ? window.innerHeight : "",
+      clicked_at: new Date().toISOString(),
+    };
+  }
+
   function resetChoiceTracking() {
-    setScreenStartedAt(new Date());
+    const nextDecisionStartedAt = new Date();
+    setScreenStartedAt(nextDecisionStartedAt);
     setOptionSelectedAt(null);
     setInitialSelectedOptionId("");
     setPreferenceChanged(false);
+    selectionSegmentStartedAtRef.current = nextDecisionStartedAt;
+    currentSelectionSegmentMsRef.current = 0;
+    accumulatedSelectionTimeMsRef.current = 0;
+    accumulatedConfirmationTimeMsRef.current = 0;
+    confirmationAttemptsRef.current = 0;
+    rejectedConfirmationsRef.current = 0;
+    rejectedProductsRef.current = [];
   }
 
   function handleSelect(
@@ -229,6 +450,13 @@ export default function RankingScreen({
     });
 
     const selectedAt = new Date();
+    const productSelectionSegmentMs = Math.max(
+      0,
+      selectedAt.getTime() - selectionSegmentStartedAtRef.current.getTime()
+    );
+    currentSelectionSegmentMsRef.current = productSelectionSegmentMs;
+    accumulatedSelectionTimeMsRef.current += productSelectionSegmentMs;
+    confirmationAttemptsRef.current += 1;
 
     if (!initialSelectedOptionId) {
       setInitialSelectedOptionId(option.id);
@@ -253,16 +481,29 @@ export default function RankingScreen({
 
     const confirmedAt = new Date();
     const selectedAt = optionSelectedAt ?? confirmedAt;
-
-    const timeSpentBeforeChoiceMs = Math.max(
-      0,
-      selectedAt.getTime() - screenStartedAt.getTime()
-    );
-
-    const timeTakenToConfirmMs = Math.max(
+    const finalConfirmationTimeMs = Math.max(
       0,
       confirmedAt.getTime() - selectedAt.getTime()
     );
+    accumulatedConfirmationTimeMsRef.current += finalConfirmationTimeMs;
+    const decisionNumber = selectedRanking.length + 1;
+    const choiceName = pendingOption.subtitle || pendingOption.title;
+
+    decisionAttemptsRef.current.push({
+      decisionNumber,
+      optionId: pendingOption.id,
+      sealId: pendingOption.sealId || "",
+      choiceName,
+      selectedAt: selectedAt.toISOString(),
+      resolvedAt: confirmedAt.toISOString(),
+      response: "Yes",
+      productSelectionTimeMs: currentSelectionSegmentMsRef.current,
+      confirmationTimeMs: finalConfirmationTimeMs,
+    });
+
+    const timeSpentBeforeChoiceMs = accumulatedSelectionTimeMsRef.current;
+    const timeTakenToConfirmMs = accumulatedConfirmationTimeMsRef.current;
+    const decisionTimeMs = timeSpentBeforeChoiceMs + timeTakenToConfirmMs;
 
     const trackedOption: RankingOption = {
       ...pendingOption,
@@ -284,6 +525,13 @@ export default function RankingScreen({
       changedPreferenceBeforeConfirming: preferenceChanged ? "Yes" : "No",
       initialSelectedOptionId: initialSelectedOptionId || pendingOption.id,
       finalConfirmedOptionId: pendingOption.id,
+      decisionSequence: decisionNumber,
+      productSelectionTimeMs: timeSpentBeforeChoiceMs,
+      confirmationTimeMs: timeTakenToConfirmMs,
+      decisionTimeMs,
+      confirmationAttempts: confirmationAttemptsRef.current,
+      rejectedConfirmations: rejectedConfirmationsRef.current,
+      rejectedProducts: rejectedProductsRef.current.join(", "),
     };
 
     const nextRanking = [...selectedRanking, trackedOption];
@@ -294,12 +542,46 @@ export default function RankingScreen({
 
     setClickLogs((current) => [...current, confirmClick]);
     setSelectedRanking(nextRanking);
+    selectedRankingRef.current = nextRanking;
+    if (
+      tracksRankingReview &&
+      nextRanking.length === options.length
+    ) {
+      currentReviewStartedAtRef.current = confirmedAt;
+      if (currentReviewInitialRankingRef.current.length === 0) {
+        currentReviewInitialRankingRef.current =
+          createRankingSnapshot(nextRanking);
+      }
+    }
     setAvailableOptions(nextAvailableOptions);
     setPendingOption(null);
     resetChoiceTracking();
   }
 
   function handleCancelChoice(event?: MouseEvent<HTMLButtonElement>) {
+    if (!pendingOption) return;
+
+    const rejectedAt = new Date();
+    const selectedAt = optionSelectedAt ?? rejectedAt;
+    const confirmationTimeMs = Math.max(
+      0,
+      rejectedAt.getTime() - selectedAt.getTime()
+    );
+    accumulatedConfirmationTimeMsRef.current += confirmationTimeMs;
+    rejectedConfirmationsRef.current += 1;
+    rejectedProductsRef.current.push(pendingOption.subtitle || pendingOption.title);
+    decisionAttemptsRef.current.push({
+      decisionNumber: selectedRanking.length + 1,
+      optionId: pendingOption.id,
+      sealId: pendingOption.sealId || "",
+      choiceName: pendingOption.subtitle || pendingOption.title,
+      selectedAt: selectedAt.toISOString(),
+      resolvedAt: rejectedAt.toISOString(),
+      response: "No",
+      productSelectionTimeMs: currentSelectionSegmentMsRef.current,
+      confirmationTimeMs,
+    });
+
     addClickLog(event, {
       eventType: "confirm_modal_no_click",
       elementId: "confirm-choice-no",
@@ -310,6 +592,8 @@ export default function RankingScreen({
 
     setPendingOption(null);
     setOptionSelectedAt(null);
+    selectionSegmentStartedAtRef.current = rejectedAt;
+    currentSelectionSegmentMsRef.current = 0;
   }
 
   function handleClearSelections(event?: MouseEvent<HTMLButtonElement>) {
@@ -322,6 +606,7 @@ export default function RankingScreen({
 
     setAvailableOptions(options);
     setSelectedRanking([]);
+    selectedRankingRef.current = [];
     setPendingOption(null);
     resetChoiceTracking();
   }
@@ -364,9 +649,116 @@ export default function RankingScreen({
     };
 
     setSelectedRanking(remainingRanking);
+    selectedRankingRef.current = remainingRanking;
     setAvailableOptions((current) => [...current, restoredOption]);
     setPendingOption(null);
     resetChoiceTracking();
+  }
+
+  function reorderSelectedRankingOverTarget(
+    targetId: string
+  ) {
+    const currentId = draggedCartOptionIdRef.current;
+
+    if (!isReorderEnabled || !currentId || currentId === targetId) return;
+
+    setSelectedRanking((currentRanking) => {
+      const fromIndex = currentRanking.findIndex((option) => option.id === currentId);
+      const toIndex = currentRanking.findIndex((option) => option.id === targetId);
+
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+        return currentRanking;
+      }
+
+      setDragDirection(toIndex > fromIndex ? "down" : "up");
+
+      const nextRanking = moveItem(currentRanking, fromIndex, toIndex);
+      selectedRankingRef.current = nextRanking;
+      return nextRanking;
+    });
+  }
+
+  function handleCartPointerDown(
+    event: PointerEvent<HTMLLIElement>,
+    optionId: string
+  ) {
+    if (!isReorderEnabled) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    draggedCartOptionIdRef.current = optionId;
+    dragStartRankRef.current =
+      selectedRankingRef.current.findIndex((option) => option.id === optionId) +
+      1;
+    setDraggedCartOptionId(optionId);
+    setDragDirection(null);
+  }
+
+  function handleCartPointerMove(event: PointerEvent<HTMLLIElement>) {
+    if (!isReorderEnabled || !draggedCartOptionIdRef.current) return;
+
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>("[data-cart-option-id]");
+
+    const targetId = target?.dataset.cartOptionId;
+
+    if (targetId) {
+      reorderSelectedRankingOverTarget(targetId);
+    }
+  }
+
+  function handleCartPointerEnd(event: PointerEvent<HTMLLIElement>) {
+    if (!isReorderEnabled) return;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    const optionId = draggedCartOptionIdRef.current;
+    const fromRank = dragStartRankRef.current;
+    const toRank = optionId
+      ? selectedRankingRef.current.findIndex((option) => option.id === optionId) +
+        1
+      : 0;
+
+    if (optionId && fromRank && toRank && fromRank !== toRank) {
+      const movedOption = selectedRankingRef.current[toRank - 1];
+      setClickLogs((currentLogs) => [
+        ...currentLogs,
+        makeCartReorderLog(
+          movedOption,
+          fromRank,
+          toRank,
+          event.clientX,
+          event.clientY
+        ),
+      ]);
+
+      if (
+        tracksRankingReview &&
+        selectedRankingRef.current.length === options.length
+      ) {
+        const movedAt = new Date();
+        const reviewStartedAt = currentReviewStartedAtRef.current ?? movedAt;
+        currentReviewReordersRef.current.push({
+          optionId: movedOption.id,
+          sealId: movedOption.sealId || "",
+          choiceName: movedOption.subtitle || movedOption.title,
+          fromRank,
+          toRank,
+          movedAt: movedAt.toISOString(),
+          timeSincePreselectionStartedMs:
+            Math.max(0, movedAt.getTime() - reviewStartedAt.getTime()),
+        });
+      }
+    }
+
+    draggedCartOptionIdRef.current = null;
+    dragStartRankRef.current = null;
+    setDraggedCartOptionId(null);
+    setDragDirection(null);
   }
 
   function handleRankingCompleteClick(event?: MouseEvent<HTMLButtonElement>) {
@@ -378,19 +770,98 @@ export default function RankingScreen({
     });
 
     const finalClickLogs = [...clickLogs, completeClick];
+    const chronologicalRanking = [...selectedRanking].sort(
+      (a, b) => (a.decisionSequence ?? 99) - (b.decisionSequence ?? 99)
+    );
+    const firstMomentCompletedAt =
+      chronologicalRanking.at(-1)?.purchaseConfirmedAt ||
+      initialTracking?.firstMomentCompletedAt ||
+      "";
+    const reviewCompletedAt = new Date();
+    const reviewStartedAt = currentReviewStartedAtRef.current;
+    const reviewTotalTimeMs = reviewStartedAt
+      ? Math.max(0, reviewCompletedAt.getTime() - reviewStartedAt.getTime())
+      : 0;
+    const finalRankingSnapshot = createRankingSnapshot(selectedRanking);
+    const tracking: RankingTrackingData = {
+      ...(initialTracking ?? {}),
+      rankingStartedAt: rankingStartedAtRef.current,
+      rankingCompletedAt: reviewCompletedAt.toISOString(),
+      firstMomentCompletedAt,
+      decisionAttempts: [...decisionAttemptsRef.current],
+      sealInteractions: [...sealInteractionsRef.current],
+      ...(tracksRankingReview
+        ? isRevisionCycle
+          ? {
+              rankingRevisions: [
+                ...(initialTracking?.rankingRevisions ?? []),
+                {
+                  startedAt:
+                    reviewStartedAt?.toISOString() ||
+                    reviewCompletedAt.toISOString(),
+                  completedAt: reviewCompletedAt.toISOString(),
+                  totalTimeMs: reviewTotalTimeMs,
+                  initialRanking: [
+                    ...currentReviewInitialRankingRef.current,
+                  ],
+                  finalRanking: finalRankingSnapshot,
+                  reorders: [...currentReviewReordersRef.current],
+                },
+              ],
+            }
+          : {
+              preselectionStartedAt:
+                reviewStartedAt?.toISOString() || firstMomentCompletedAt,
+              preselectionCompletedAt: reviewCompletedAt.toISOString(),
+              preselectionTotalTimeMs: reviewTotalTimeMs,
+              preselectionInitialRanking: [
+                ...currentReviewInitialRankingRef.current,
+              ],
+              preselectionFinalRanking: finalRankingSnapshot,
+              preselectionReorders: [...currentReviewReordersRef.current],
+            }
+        : {}),
+    };
 
     setClickLogs(finalClickLogs);
-    onRankingComplete(selectedRanking, finalClickLogs);
+    onRankingComplete(selectedRanking, finalClickLogs, tracking);
+  }
+
+  function handleSealZoomOpen(option: RankingOption) {
+    if (!openSealTimesRef.current.has(option.id)) {
+      openSealTimesRef.current.set(option.id, new Date());
+    }
+  }
+
+  function handleSealZoomClose(option: RankingOption) {
+    const openedAt = openSealTimesRef.current.get(option.id);
+
+    if (!openedAt) return;
+
+    const closedAt = new Date();
+    sealInteractionsRef.current.push({
+      optionId: option.id,
+      sealId: option.sealId || "",
+      sealName: option.subtitle || option.title,
+      openedAt: openedAt.toISOString(),
+      closedAt: closedAt.toISOString(),
+      durationMs: Math.max(0, closedAt.getTime() - openedAt.getTime()),
+    });
+    openSealTimesRef.current.delete(option.id);
+    setProgressRevision((current) => current + 1);
   }
 
   return (
     <div className="ranking-area">
+      {!(isReorderEnabled && selectedRanking.length === options.length) && (
       <header className="ranking-toolbar">
         <div>
-          <p>
-            {t("common.session")} {sessionNumber}
-            {sessionSuffix ? `. ${sessionSuffix}` : ""}
-          </p>
+          {showSessionLabel && (
+            <p>
+              {t("common.session")} {sessionNumber}
+              {sessionSuffix ? `. ${sessionSuffix}` : ""}
+            </p>
+          )}
 
           <h2>
             {title ??
@@ -399,138 +870,59 @@ export default function RankingScreen({
                 : `${t("ranking.stepN")} #${currentRank}`)}
           </h2>
 
+          {progressLabel && (
+            <p className="ranking-progress-label">{progressLabel}</p>
+          )}
+
           <span>{description ?? t("ranking.instruction")}</span>
         </div>
 
-        <button type="button" onClick={handleClearSelections}>
-          {t("ranking.clear")}
-        </button>
+        {!isReorderEnabled && (
+          <button
+            type="button"
+            className="clear-selections-button"
+            onClick={handleClearSelections}
+          >
+            {t("ranking.clear")}
+          </button>
+        )}
       </header>
+      )}
 
       <div className="ranking-layout">
-        <section className="product-grid">
-          <AnimatePresence mode="popLayout">
-            {availableOptions.map((option, index) => (
-              <motion.div
-                key={option.id}
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{
-                  opacity: 0,
-                  scale: 0.9,
-                  transition: { duration: 0.18 },
-                }}
-                transition={{ duration: 0.28, ease: "easeInOut" }}
-              >
-                <div
-                  onClickCapture={(event) => {
-                    const target = event.target as HTMLElement;
+        <RankingProductGrid
+          options={availableOptions}
+          location={location}
+          sealZoom={sealZoom}
+          onSelect={handleSelect}
+          onSealZoomOpen={handleSealZoomOpen}
+          onSealZoomClose={handleSealZoomClose}
+          onSealClick={(option) => {
+            addClickLog(undefined, {
+              eventType: "seal_image_click",
+              elementId: `seal-${option.sealId || ""}`,
+              elementLabel: option.subtitle || option.title,
+              option,
+              rankNumber: currentRank,
+            });
+            onSealClick?.(option.sealId);
+          }}
+        />
 
-                    if (
-                      target.closest("button") ||
-                      target.closest("a")
-                    ) {
-                      return;
-                    }
-
-                    handleSelect(option, event);
-                  }}
-                >
-                  <ProductCard
-                    option={option}
-                    displayedPosition={index + 1}
-                    location={location}
-                    sealZoom={sealZoom}
-                    onSelect={() => handleSelect(option)}
-                    onSealClick={
-                      onSealClick
-                        ? () => {
-                            addClickLog(undefined, {
-                              eventType: "seal_image_click",
-                              elementId: `seal-${option.sealId || ""}`,
-                              elementLabel: option.subtitle || option.title,
-                              option,
-                              rankNumber: currentRank,
-                            });
-                            onSealClick(option.sealId);
-                          }
-                        : undefined
-                    }
-                  />
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </section>
-
-        <aside
-          className={`selection-cart${
-            selectedRanking.length === options.length
-              ? " selection-cart--complete"
-              : ""
-          }`}
-        >
-          <div className="cart-header">
-            <div>
-              <p>{t("ranking.cartTitle")}</p>
-              <h3>{t("ranking.cartSubtitle")}</h3>
-            </div>
-
-            <span>
-              {selectedRanking.length}/{options.length}
-            </span>
-          </div>
-
-          {selectedRanking.length === 0 ? (
-            <div className="empty-cart">
-              <strong>{t("ranking.cartEmpty")}</strong>
-              <p>{t("ranking.cartEmptyDesc")}</p>
-            </div>
-          ) : (
-            <ol className="cart-list">
-              {selectedRanking.map((option, index) => (
-                <li key={option.id} className="cart-item">
-                  <div className="cart-rank">#{index + 1}</div>
-
-                  <div className="cart-item-info">
-                    <strong>{option.title}</strong>
-                    <span>{option.subtitle}</span>
-
-                    {showPriceInCart &&
-                      typeof option.price === "number" && (
-                        <span className="cart-item-price">
-                          {formatOptionPrice(option)}
-                        </span>
-                      )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(event) => removeFromCart(option.id, event)}
-                    aria-label={`${t("ranking.removeAria")} ${option.title}`}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {selectedRanking.length === options.length && (
-            <button
-              type="button"
-              className="cart-complete-button"
-              style={{
-                background:
-                  locationColors[location ?? ""] ?? "#bb0b0b",
-              }}
-              onClick={handleRankingCompleteClick}
-            >
-              {t("ranking.confirm")}
-            </button>
-          )}
-        </aside>
+        <RankingSelectionCart
+          ranking={selectedRanking}
+          totalOptions={options.length}
+          isReorderEnabled={isReorderEnabled}
+          draggedOptionId={draggedCartOptionId}
+          dragDirection={dragDirection}
+          showPriceInCart={showPriceInCart}
+          location={location}
+          onPointerDown={handleCartPointerDown}
+          onPointerMove={handleCartPointerMove}
+          onPointerEnd={handleCartPointerEnd}
+          onRemove={removeFromCart}
+          onComplete={handleRankingCompleteClick}
+        />
       </div>
 
       <ConfirmModal
@@ -550,7 +942,7 @@ export default function RankingScreen({
             : ""
         }
         confirmColor={
-          locationColors[location ?? ""] ?? "#bb0b0b"
+          getLocationColor(location ?? "")
         }
         onConfirm={handleConfirmChoice}
         onCancel={handleCancelChoice}
@@ -558,3 +950,4 @@ export default function RankingScreen({
     </div>
   );
 }
+

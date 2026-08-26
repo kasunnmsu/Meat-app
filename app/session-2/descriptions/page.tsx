@@ -1,24 +1,38 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import RankingScreen, { ClickLogRow, RankingOption } from "@/components/RankingScreen";
+import RankingScreen, {
+  ClickLogRow,
+  RankingOption,
+  RankingProgressDraft,
+} from "@/components/RankingScreen";
 import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
+import FinalRankingList from "@/components/FinalRankingList";
+import SealDescriptionModal from "@/components/SealDescriptionModal";
 import { seededShuffle } from "@/lib/randomization";
-import { getSession2Options } from "@/lib/locations";
+import { getLocationColor, getSession2Options } from "@/lib/locations";
 import { saveWithRetry } from "@/lib/saveWithRetry";
-import { useLanguage, TranslationKey } from "@/lib/i18n";
-
-type SealInfo = {
-  id: string;
-  name: string;
-  color: string;
-  imageUrl: string;
-  description: string;
-  nameKey: TranslationKey;
-  descKey: TranslationKey;
-};
+import { useLanguage } from "@/lib/i18n";
+import { isCompleteRanking } from "@/lib/payloadValidation";
+import { loadSurveyDraft, saveSurveyDraft } from "@/lib/surveyDraft";
+import {
+  getSealDefinitions,
+  getSealNameKey,
+  type SealDefinition,
+} from "@/lib/seals";
+import {
+  createSessionClickRows,
+  createSessionTwoPayload,
+} from "@/lib/sessionPayloads";
+import type {
+  FinalConfirmationAttemptRecord,
+  RankingSnapshotItem,
+  RankingTrackingData,
+  ReadingScreenVisitRecord,
+  SealInteractionRecord,
+  SealReadingInteractionRecord,
+} from "@/lib/sessionTracking";
 
 type SealReadingRecord = {
   sealId: string;
@@ -35,253 +49,233 @@ type Step =
   | "demographics"
   | "completed";
 
-const SEALS_PUCPR: SealInfo[] = [
-  {
-    id: "red-1",
-    name: "Certificação Angus",
-    color: "red",
-    imageUrl: "/images/seals/pucpr/a.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.full",
-    descKey: "seal.angus.desc",
-  },
-  {
-    id: "red-2",
-    name: "Certificação Bem-Estar Animal",
-    color: "red",
-    imageUrl: "/images/seals/pucpr/bea.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.full",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    id: "green-1",
-    name: "Selo de Carne Bovina",
-    color: "red",
-    imageUrl: "/images/seals/pucpr/cb.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.full",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    id: "green-2",
-    name: "Certificação Carne Cultivada",
-    color: "red",
-    imageUrl: "/images/seals/pucpr/cc.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.full",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    id: "green-3",
-    name: "Certificação Orgânica",
-    color: "red",
-    imageUrl: "/images/seals/pucpr/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.full",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const SEALS_UFBA: SealInfo[] = [
-  {
-    id: "red-1",
-    name: "Certificação Angus",
-    color: "green",
-    imageUrl: "/images/seals/ufba/a.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.full",
-    descKey: "seal.angus.desc",
-  },
-  {
-    id: "red-2",
-    name: "Certificação Bem-Estar Animal",
-    color: "green",
-    imageUrl: "/images/seals/ufba/bea.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.full",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    id: "green-1",
-    name: "Selo de Carne Bovina",
-    color: "green",
-    imageUrl: "/images/seals/ufba/cb.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.full",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    id: "green-2",
-    name: "Certificação Carne Cultivada",
-    color: "green",
-    imageUrl: "/images/seals/ufba/cc.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.full",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    id: "green-3",
-    name: "Certificação Orgânica",
-    color: "green",
-    imageUrl: "/images/seals/ufba/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.full",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const SEALS_NMSU: SealInfo[] = [
-  {
-    id: "red-1",
-    name: "Certificação Angus",
-    color: "red",
-    imageUrl: "/images/seals/nmsu/angus.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.full",
-    descKey: "seal.angus.desc",
-  },
-  {
-    id: "red-2",
-    name: "Certificação Bem-Estar Animal",
-    color: "red",
-    imageUrl: "/images/seals/nmsu/animal.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.full",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    id: "green-1",
-    name: "Selo de Carne Bovina",
-    color: "red",
-    imageUrl: "/images/seals/nmsu/beef.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.full",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    id: "green-2",
-    name: "Certificação Carne Cultivada",
-    color: "red",
-    imageUrl: "/images/seals/nmsu/cultured.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.full",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    id: "green-3",
-    name: "Certificação Orgânica",
-    color: "red",
-    imageUrl: "/images/seals/nmsu/organic.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.full",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const locationColors: Record<string, string> = {
-  PUCPR: "#bb0b0b",
-  UFBA: "#1a7a3a",
-  NMSU: "#bb0b0b",
+type SessionTwoDraft = {
+  step: Step;
+  readSealIds: string[];
+  sealReadingRecords: SealReadingRecord[];
+  activeSealId: string | null;
+  completedRanking: RankingOption[];
+  rankingClickLogs: ClickLogRow[];
+  rankingTracking: RankingTrackingData | null;
+  rankingProgress: RankingProgressDraft | null;
+  agreedToDescriptions: string;
+  rankingSealClicks: Record<string, number>;
+  rankingSealClickRecords: { sealId: string; sealName: string; clickedAt: string }[];
+  rankingSealInteractionRecords: SealInteractionRecord[];
+  sealReadingInteractionRecords: SealReadingInteractionRecord[];
+  readingScreenVisitRecords: ReadingScreenVisitRecord[];
+  demographics: DemographicsData;
+  readingStartedAt: string | null;
+  currentReadingVisitStartedAt: string | null;
+  allSealsFirstReadAt: string | null;
+  firstOpenOrder: string[];
+  readingSealOpenedAt: Omit<NonNullable<SessionTwoDraftRuntime["readingSealOpenedAt"]>, "openedAt"> & { openedAt: string } | null;
+  rankingSealOpenedAt: Omit<NonNullable<SessionTwoDraftRuntime["rankingSealOpenedAt"]>, "openedAt"> & { openedAt: string } | null;
+  finalConfirmationStartedAt: string | null;
 };
 
-function getSealNameKey(
-  location: string,
-  sealId?: string
-): TranslationKey {
-  if (sealId === "red-1") {
-    return "seal.angus.short";
-  }
+type SessionTwoDraftRuntime = {
+  readingSealOpenedAt: {
+    sealId: string;
+    sealName: string;
+    openedAt: Date;
+    firstOpen: boolean;
+    firstOpenOrder?: number;
+  } | null;
+  rankingSealOpenedAt: {
+    optionId: string;
+    sealId: string;
+    sealName: string;
+    openedAt: Date;
+  } | null;
+};
 
-  if (sealId === "red-2") {
-    return "seal.welfare.short";
-  }
-
-  if (sealId === "green-1") {
-    return "seal.traditional.short";
-  }
-
-  if (sealId === "green-2") {
-    return "seal.cultivated.short";
-  }
-
-  if (sealId === "green-3") {
-    return "seal.organic.short";
-  }
-
-  return "seal.traditional.short";
-}
-
-
-function addRankingTimingFields(
-  participantRow: Record<string, string | number>,
-  ranking: RankingOption[]
-) {
-  ranking.forEach((option, index) => {
-    const prefix = `rank_${index + 1}`;
-
-    participantRow[`${prefix}_screen_started_at`] =
-      option.screenStartedAt ?? "";
-    participantRow[`${prefix}_option_selected_at`] =
-      option.optionSelectedAt ?? "";
-    participantRow[`${prefix}_purchase_confirmed_at`] =
-      option.purchaseConfirmedAt ?? "";
-    participantRow[`${prefix}_time_spent_before_choice_ms`] =
-      option.timeSpentBeforeChoiceMs ?? "";
-    participantRow[`${prefix}_time_spent_before_choice_seconds`] =
-      option.timeSpentBeforeChoiceSeconds ?? "";
-    participantRow[`${prefix}_time_taken_to_confirm_ms`] =
-      option.timeTakenToConfirmMs ?? "";
-    participantRow[`${prefix}_time_taken_to_confirm_seconds`] =
-      option.timeTakenToConfirmSeconds ?? "";
-    participantRow[`${prefix}_changed_preference_before_confirming`] =
-      option.changedPreferenceBeforeConfirming ?? "";
-    participantRow[`${prefix}_initial_selected_option_id`] =
-      option.initialSelectedOptionId ?? "";
-    participantRow[`${prefix}_final_confirmed_option_id`] =
-      option.finalConfirmedOptionId ?? "";
-  });
-}
+const EMPTY_DEMOGRAPHICS: DemographicsData = {
+  gender: "",
+  ageGroup: "",
+  educationLevel: "",
+  incomeGroup: "",
+};
 
 export default function SessionTwoDescriptionsPage() {
-  const router = useRouter();
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [participantId, setParticipantId] = useState("");
   const [participantLocation, setParticipantLocation] = useState("");
   const [step, setStep] = useState<Step>("transition");
   const [readSealIds, setReadSealIds] = useState<string[]>([]);
   const [sealReadingRecords, setSealReadingRecords] = useState<SealReadingRecord[]>([]);
-  const [activeSeal, setActiveSeal] = useState<SealInfo | null>(null);
+  const [activeSeal, setActiveSeal] = useState<SealDefinition | null>(null);
   const [completedRanking, setCompletedRanking] = useState<RankingOption[]>([]);
   const [rankingClickLogs, setRankingClickLogs] = useState<ClickLogRow[]>([]);
+  const [rankingTracking, setRankingTracking] =
+    useState<RankingTrackingData | null>(null);
   const [agreedToDescriptions, setAgreedToDescriptions] = useState("");
   const [isSavingFinal, setIsSavingFinal] = useState(false);
-  const [zoomedSealId, setZoomedSealId] = useState<string | null>(null);
   const [rankingSealClicks, setRankingSealClicks] = useState<Record<string, number>>({});
   const [rankingSealClickRecords, setRankingSealClickRecords] = useState<{ sealId: string; sealName: string; clickedAt: string }[]>([]);
+  const [rankingSealInteractionRecords, setRankingSealInteractionRecords] =
+    useState<SealInteractionRecord[]>([]);
+  const [sealReadingInteractionRecords, setSealReadingInteractionRecords] =
+    useState<SealReadingInteractionRecord[]>([]);
+  const [readingScreenVisitRecords, setReadingScreenVisitRecords] =
+    useState<ReadingScreenVisitRecord[]>([]);
+  const [rankingProgress, setRankingProgress] =
+    useState<RankingProgressDraft | null>(null);
+  const [demographicsDraft, setDemographicsDraft] =
+    useState<DemographicsData>(EMPTY_DEMOGRAPHICS);
+  const [draftReady, setDraftReady] = useState(false);
   const savingFinalRef = useRef(false);
+  const readingStartedAtRef = useRef<Date | null>(null);
+  const currentReadingVisitStartedAtRef = useRef<Date | null>(null);
+  const allSealsFirstReadAtRef = useRef<Date | null>(null);
+  const firstOpenOrderRef = useRef<string[]>([]);
+  const readingSealOpenedAtRef = useRef<{
+    sealId: string;
+    sealName: string;
+    openedAt: Date;
+    firstOpen: boolean;
+    firstOpenOrder?: number;
+  } | null>(null);
+  const rankingSealOpenedAtRef = useRef<{
+    optionId: string;
+    sealId: string;
+    sealName: string;
+    openedAt: Date;
+  } | null>(null);
+  const finalConfirmationStartedAtRef = useRef<Date | null>(null);
 
   useEffect(() => {
-    setParticipantId(localStorage.getItem("participantId") || "DEMO-PARTICIPANT");
-    setParticipantLocation(localStorage.getItem("participantLocation") || "UNKNOWN");
+    const storedParticipantId =
+      localStorage.getItem("participantId") || "DEMO-PARTICIPANT";
+    const storedLocation =
+      localStorage.getItem("participantLocation") || "UNKNOWN";
+    const draft = loadSurveyDraft<SessionTwoDraft>(
+      "session-2",
+      storedParticipantId,
+      storedLocation
+    );
+
+    setParticipantId(storedParticipantId);
+    setParticipantLocation(storedLocation);
+
+    if (draft) {
+      setStep(draft.step);
+      setReadSealIds(draft.readSealIds ?? []);
+      setSealReadingRecords(draft.sealReadingRecords ?? []);
+      setCompletedRanking(draft.completedRanking ?? []);
+      setRankingClickLogs(draft.rankingClickLogs ?? []);
+      setRankingTracking(draft.rankingTracking ?? null);
+      setRankingProgress(draft.rankingProgress ?? null);
+      setAgreedToDescriptions(draft.agreedToDescriptions ?? "");
+      setRankingSealClicks(draft.rankingSealClicks ?? {});
+      setRankingSealClickRecords(draft.rankingSealClickRecords ?? []);
+      setRankingSealInteractionRecords(draft.rankingSealInteractionRecords ?? []);
+      setSealReadingInteractionRecords(draft.sealReadingInteractionRecords ?? []);
+      setReadingScreenVisitRecords(draft.readingScreenVisitRecords ?? []);
+      setDemographicsDraft(draft.demographics ?? EMPTY_DEMOGRAPHICS);
+      setActiveSeal(
+        getSealDefinitions(storedLocation).find(
+          (seal) => seal.id === draft.activeSealId
+        ) ?? null
+      );
+      readingStartedAtRef.current = draft.readingStartedAt
+        ? new Date(draft.readingStartedAt)
+        : null;
+      currentReadingVisitStartedAtRef.current = draft.currentReadingVisitStartedAt
+        ? new Date(draft.currentReadingVisitStartedAt)
+        : null;
+      allSealsFirstReadAtRef.current = draft.allSealsFirstReadAt
+        ? new Date(draft.allSealsFirstReadAt)
+        : null;
+      firstOpenOrderRef.current = [...(draft.firstOpenOrder ?? [])];
+      readingSealOpenedAtRef.current = draft.readingSealOpenedAt
+        ? { ...draft.readingSealOpenedAt, openedAt: new Date(draft.readingSealOpenedAt.openedAt) }
+        : null;
+      rankingSealOpenedAtRef.current = draft.rankingSealOpenedAt
+        ? { ...draft.rankingSealOpenedAt, openedAt: new Date(draft.rankingSealOpenedAt.openedAt) }
+        : null;
+      finalConfirmationStartedAtRef.current = draft.finalConfirmationStartedAt
+        ? new Date(draft.finalConfirmationStartedAt)
+        : null;
+    }
+
+    setDraftReady(true);
   }, []);
 
-  const seals = participantLocation === "UFBA" ? SEALS_UFBA : participantLocation === "NMSU" ? SEALS_NMSU : SEALS_PUCPR;
+  useEffect(() => {
+    if (step === "final-confirmation") {
+      finalConfirmationStartedAtRef.current ??= new Date();
+    }
+
+    if (step === "reading") {
+      const startedAt = new Date();
+      readingStartedAtRef.current ??= startedAt;
+      currentReadingVisitStartedAtRef.current ??= startedAt;
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (!draftReady || !participantId) return;
+
+    const readingSealOpenedAt = readingSealOpenedAtRef.current;
+    const rankingSealOpenedAt = rankingSealOpenedAtRef.current;
+    saveSurveyDraft<SessionTwoDraft>(
+      "session-2",
+      participantId,
+      participantLocation,
+      {
+        step,
+        readSealIds,
+        sealReadingRecords,
+        activeSealId: activeSeal?.id ?? null,
+        completedRanking,
+        rankingClickLogs,
+        rankingTracking,
+        rankingProgress,
+        agreedToDescriptions,
+        rankingSealClicks,
+        rankingSealClickRecords,
+        rankingSealInteractionRecords,
+        sealReadingInteractionRecords,
+        readingScreenVisitRecords,
+        demographics: demographicsDraft,
+        readingStartedAt: readingStartedAtRef.current?.toISOString() ?? null,
+        currentReadingVisitStartedAt:
+          currentReadingVisitStartedAtRef.current?.toISOString() ?? null,
+        allSealsFirstReadAt: allSealsFirstReadAtRef.current?.toISOString() ?? null,
+        firstOpenOrder: [...firstOpenOrderRef.current],
+        readingSealOpenedAt: readingSealOpenedAt
+          ? { ...readingSealOpenedAt, openedAt: readingSealOpenedAt.openedAt.toISOString() }
+          : null,
+        rankingSealOpenedAt: rankingSealOpenedAt
+          ? { ...rankingSealOpenedAt, openedAt: rankingSealOpenedAt.openedAt.toISOString() }
+          : null,
+        finalConfirmationStartedAt:
+          finalConfirmationStartedAtRef.current?.toISOString() ?? null,
+      }
+    );
+  }, [
+    activeSeal,
+    agreedToDescriptions,
+    completedRanking,
+    demographicsDraft,
+    draftReady,
+    participantId,
+    participantLocation,
+    rankingClickLogs,
+    rankingProgress,
+    rankingSealClickRecords,
+    rankingSealClicks,
+    rankingSealInteractionRecords,
+    rankingTracking,
+    readSealIds,
+    readingScreenVisitRecords,
+    sealReadingInteractionRecords,
+    sealReadingRecords,
+    step,
+  ]);
+
+  const seals = getSealDefinitions(participantLocation);
 
   const randomizationSeed = useMemo(() => {
     return participantId ? `${participantId}-session-2` : "demo-session-2";
@@ -309,38 +303,118 @@ export default function SessionTwoDescriptionsPage() {
     return randomizedOptions.map((option) => ({
       ...option,
       title: translatedCutTitle,
-      subtitle: t(
-        getSealNameKey(participantLocation, option.sealId)
-      ),
+      subtitle: t(getSealNameKey(option.sealId)),
     }));
   }, [
     randomizedOptions,
     participantLocation,
-    language,
     t,
   ]);
 
   const allSealsRead = readSealIds.length === seals.length;
 
-  function openSealDescription(seal: SealInfo) {
+  function openSealDescription(seal: SealDefinition) {
+    const openedAt = new Date();
     setActiveSeal(seal);
 
     if (!readSealIds.includes(seal.id)) {
+      firstOpenOrderRef.current.push(seal.id);
+      const firstOpenOrder = firstOpenOrderRef.current.length;
       setReadSealIds((current) => [...current, seal.id]);
 
       setSealReadingRecords((current) => [
         ...current,
         {
           sealId: seal.id,
-          sealName: t(seal.nameKey),
-          openedAt: new Date().toISOString(),
+          sealName: t(seal.fullNameKey),
+          openedAt: openedAt.toISOString(),
         },
       ]);
+
+      if (firstOpenOrder === seals.length) {
+        allSealsFirstReadAtRef.current = openedAt;
+      }
+
+      if (step === "reading") {
+        readingSealOpenedAtRef.current = {
+          sealId: seal.id,
+          sealName: t(seal.fullNameKey),
+          openedAt,
+          firstOpen: true,
+          firstOpenOrder,
+        };
+      }
+    } else if (step === "reading") {
+      readingSealOpenedAtRef.current = {
+        sealId: seal.id,
+        sealName: t(seal.fullNameKey),
+        openedAt,
+        firstOpen: false,
+      };
     }
   }
 
   function closeSealDescription() {
+    const openInteraction = rankingSealOpenedAtRef.current;
+    const readingInteraction = readingSealOpenedAtRef.current;
+
+    if (readingInteraction) {
+      const closedAt = new Date();
+      setSealReadingInteractionRecords((current) => [
+        ...current,
+        {
+          sealId: readingInteraction.sealId,
+          sealName: readingInteraction.sealName,
+          openedAt: readingInteraction.openedAt.toISOString(),
+          closedAt: closedAt.toISOString(),
+          durationMs: Math.max(
+            0,
+            closedAt.getTime() - readingInteraction.openedAt.getTime()
+          ),
+          firstOpen: readingInteraction.firstOpen,
+          firstOpenOrder: readingInteraction.firstOpenOrder,
+        },
+      ]);
+      readingSealOpenedAtRef.current = null;
+    }
+
+    if (openInteraction) {
+      const closedAt = new Date();
+      setRankingSealInteractionRecords((current) => [
+        ...current,
+        {
+          optionId: openInteraction.optionId,
+          sealId: openInteraction.sealId,
+          sealName: openInteraction.sealName,
+          openedAt: openInteraction.openedAt.toISOString(),
+          closedAt: closedAt.toISOString(),
+          durationMs: Math.max(
+            0,
+            closedAt.getTime() - openInteraction.openedAt.getTime()
+          ),
+        },
+      ]);
+      rankingSealOpenedAtRef.current = null;
+    }
+
     setActiveSeal(null);
+  }
+
+  function handleReadingContinue() {
+    if (!allSealsRead) return;
+
+    const completedAt = new Date();
+    const startedAt = currentReadingVisitStartedAtRef.current ?? completedAt;
+    setReadingScreenVisitRecords((current) => [
+      ...current,
+      {
+        startedAt: startedAt.toISOString(),
+        completedAt: completedAt.toISOString(),
+        durationMs: Math.max(0, completedAt.getTime() - startedAt.getTime()),
+      },
+    ]);
+    currentReadingVisitStartedAtRef.current = null;
+    setStep("agreement");
   }
 
   function handleAgreementYes() {
@@ -355,15 +429,66 @@ export default function SessionTwoDescriptionsPage() {
 
   function handleRankingComplete(
     ranking: RankingOption[],
-    clickLogs: ClickLogRow[] = []
+    clickLogs: ClickLogRow[] = [],
+    tracking?: RankingTrackingData
   ) {
     setCompletedRanking(ranking);
     setRankingClickLogs(clickLogs);
+    if (tracking) {
+      setRankingTracking(tracking);
+    }
+    setRankingProgress(null);
     setStep("final-confirmation");
+  }
+
+  function createRankingSnapshot(
+    ranking: RankingOption[]
+  ): RankingSnapshotItem[] {
+    return ranking.map((option) => ({
+      optionId: option.id,
+      sealId: option.sealId || "",
+      choiceName: option.subtitle || option.title,
+    }));
+  }
+
+  function recordFinalConfirmation(
+    response: FinalConfirmationAttemptRecord["response"]
+  ) {
+    if (!rankingTracking) return null;
+
+    const respondedAt = new Date();
+    const startedAt = finalConfirmationStartedAtRef.current ?? respondedAt;
+    const updatedTracking: RankingTrackingData = {
+      ...rankingTracking,
+      finalConfirmationAttempts: [
+        ...(rankingTracking.finalConfirmationAttempts ?? []),
+        {
+          ranking: createRankingSnapshot(completedRanking),
+          startedAt: startedAt.toISOString(),
+          respondedAt: respondedAt.toISOString(),
+          durationMs: Math.max(
+            0,
+            respondedAt.getTime() - startedAt.getTime()
+          ),
+          response,
+        },
+      ],
+    };
+
+    setRankingTracking(updatedTracking);
+    return updatedTracking;
   }
 
   async function handleFinalConfirmationYes() {
     if (savingFinalRef.current) return;
+
+    if (!isCompleteRanking(completedRanking, 5) || !allSealsRead) {
+      alert(t("common.validationError"));
+      setStep(allSealsRead ? "ranking" : "reading");
+      return;
+    }
+
+    const completedTracking = recordFinalConfirmation("Yes");
 
     const surveyMode = localStorage.getItem("surveyMode");
 
@@ -372,7 +497,9 @@ export default function SessionTwoDescriptionsPage() {
       setIsSavingFinal(true);
 
       try {
-        await saveSessionTwoWithoutQuestionnaire();
+        await saveSessionTwoWithoutQuestionnaire(
+          completedTracking ?? undefined
+        );
       } finally {
         savingFinalRef.current = false;
         setIsSavingFinal(false);
@@ -384,8 +511,8 @@ export default function SessionTwoDescriptionsPage() {
   }
 
   function handleFinalConfirmationNo() {
-    setCompletedRanking([]);
-    setRankingClickLogs([]);
+    recordFinalConfirmation("No");
+    finalConfirmationStartedAtRef.current = null;
     setStep("ranking");
   }
 
@@ -393,279 +520,104 @@ export default function SessionTwoDescriptionsPage() {
     return seals.find((seal) => seal.id === sealId) || null;
   }
 
-  async function saveSessionTwoWithoutQuestionnaire() {
+  async function saveSessionTwoData(
+    demographics: DemographicsData,
+    options: {
+      saveDemographicsLocally: boolean;
+    },
+    trackingOverride?: RankingTrackingData
+  ) {
     const timestamp = new Date().toISOString();
-
-    const longRows = completedRanking.map((option, index) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
-      randomization_seed: randomizationSeed,
-      agreed_to_descriptions: agreedToDescriptions,
-      selected_rank: index + 1,
-      option_id: option.id,
-      cut_id: option.cutId || "",
-      seal_id: option.sealId || "",
-      title: option.title,
-      subtitle: option.subtitle || "",
-      cut_image_url: option.cutImageUrl || "",
-      seal_image_url: option.sealImageUrl || "",
-      seal_color: option.sealColor || "",
-      screen_started_at: option.screenStartedAt ?? "",
-      option_selected_at: option.optionSelectedAt ?? "",
-      purchase_confirmed_at: option.purchaseConfirmedAt ?? "",
-      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs ?? "",
-      time_spent_before_choice_seconds:
-        option.timeSpentBeforeChoiceSeconds ?? "",
-      time_taken_to_confirm_ms: option.timeTakenToConfirmMs ?? "",
-      time_taken_to_confirm_seconds:
-        option.timeTakenToConfirmSeconds ?? "",
-      changed_preference_before_confirming:
-        option.changedPreferenceBeforeConfirming ?? "",
-      initial_selected_option_id: option.initialSelectedOptionId ?? "",
-      final_confirmed_option_id: option.finalConfirmedOptionId ?? "",
-      gender: "Collected in Session 3",
-      age_group: "Collected in Session 3",
-      education_level: "Collected in Session 3",
-      income_group: "Collected in Session 3",
+    const activeTracking = trackingOverride ?? rankingTracking;
+    const {
+      participantRow,
+      longRows,
+      sealReadingRows,
+      rankingSealClickRows,
+      decisionAttemptRows,
+      rankingSealInteractionRows,
+      sealReadingInteractionRows,
+      readingScreenVisitRows,
+      preselectionReorderRows,
+      finalConfirmationRows,
+      rankingRevisionRows,
+      revisionReorderRows,
+    } = createSessionTwoPayload({
+      participantId,
+      participantLocation,
+      randomizationSeed,
+      ranking: completedRanking,
+      initialDisplayOrder: translatedOptions,
+      demographics,
       timestamp,
-    }));
-
-    const participantRow: Record<string, string | number> = {
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
-      randomization_seed: randomizationSeed,
-      agreed_to_descriptions: agreedToDescriptions,
-
-      gender: "Collected in Session 3",
-      age_group: "Collected in Session 3",
-      education_level: "Collected in Session 3",
-      income_group: "Collected in Session 3",
-
-      seals_read_count: readSealIds.length,
-      all_seals_read: allSealsRead ? "Yes" : "No",
-
-      rank_1_option_id: completedRanking[0]?.id || "",
-      rank_1_cut_id: completedRanking[0]?.cutId || "",
-      rank_1_seal_id: completedRanking[0]?.sealId || "",
-      rank_1_title: completedRanking[0]?.title || "",
-
-      rank_2_option_id: completedRanking[1]?.id || "",
-      rank_2_cut_id: completedRanking[1]?.cutId || "",
-      rank_2_seal_id: completedRanking[1]?.sealId || "",
-      rank_2_title: completedRanking[1]?.title || "",
-
-      rank_3_option_id: completedRanking[2]?.id || "",
-      rank_3_cut_id: completedRanking[2]?.cutId || "",
-      rank_3_seal_id: completedRanking[2]?.sealId || "",
-      rank_3_title: completedRanking[2]?.title || "",
-
-      rank_4_option_id: completedRanking[3]?.id || "",
-      rank_4_cut_id: completedRanking[3]?.cutId || "",
-      rank_4_seal_id: completedRanking[3]?.sealId || "",
-      rank_4_title: completedRanking[3]?.title || "",
-
-      rank_5_option_id: completedRanking[4]?.id || "",
-      rank_5_cut_id: completedRanking[4]?.cutId || "",
-      rank_5_seal_id: completedRanking[4]?.sealId || "",
-      rank_5_title: completedRanking[4]?.title || "",
-
-      timestamp,
-    };
-
-    const sealReadingRows = sealReadingRecords.map((record) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      seal_id: record.sealId,
-      seal_name: record.sealName,
-      opened_description: "Yes",
-      opened_at: record.openedAt,
-      agreed_to_descriptions: agreedToDescriptions,
-      timestamp,
-    }));
-
-    const rankingSealClickRows = rankingSealClickRecords.map((record) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      phase: "ranking",
-      seal_id: record.sealId,
-      seal_name: record.sealName,
-      clicked_at: record.clickedAt,
-      total_clicks_this_seal: rankingSealClicks[record.sealId] || 1,
-      timestamp,
-    }));
-
-    addRankingTimingFields(participantRow, completedRanking);
-
-  const clickRows = rankingClickLogs.map((row) => ({
-      ...row,
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      timestamp,
-    }));
+      agreedToDescriptions,
+      readSealCount: readSealIds.length,
+      allSealsRead,
+      sealReadingDisplayOrder: randomizedReadingSeals.map((seal) => ({
+        sealId: seal.id,
+        sealName: t(seal.shortNameKey),
+      })),
+      sealReadingRecords,
+      rankingSealClickRecords,
+      rankingSealClicks,
+      rankingSealInteractionRecords,
+      sealReadingInteractionRecords,
+      readingScreenVisitRecords,
+      readingStartedAt: readingStartedAtRef.current?.toISOString(),
+      allSealsFirstReadAt:
+        allSealsFirstReadAtRef.current?.toISOString(),
+      tracking: activeTracking
+        ? {
+            ...activeTracking,
+            sessionCompletedAt: timestamp,
+          }
+        : undefined,
+    });
+    const clickRows = createSessionClickRows(
+      rankingClickLogs,
+      participantId,
+      participantLocation,
+      2,
+      timestamp
+    );
 
     const result = await saveWithRetry("/api/session-2/save", {
       participantRow,
       longRows,
       sealReadingRows,
       rankingSealClickRows,
+      decisionAttemptRows,
+      rankingSealInteractionRows,
+      sealReadingInteractionRows,
+      readingScreenVisitRows,
+      preselectionReorderRows,
+      finalConfirmationRows,
+      rankingRevisionRows,
+      revisionReorderRows,
     });
 
+    if (result.validationError) {
+      alert(t("common.validationError"));
+      setStep(isCompleteRanking(completedRanking, 5) ? "reading" : "ranking");
+      return;
+    }
+
     if (clickRows.length > 0) {
-      await saveWithRetry("/api/click-logs/save", {
-        clickRows,
-      });
+      await saveWithRetry("/api/click-logs/save", { clickRows });
     }
 
     localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
-    localStorage.setItem("session-2-seal-readings", JSON.stringify(sealReadingRows));
+    localStorage.setItem(
+      "session-2-seal-readings",
+      JSON.stringify(sealReadingRows)
+    );
 
-    if (result.queued) {
-      alert(t("common.saveAlert"));
+    if (options.saveDemographicsLocally) {
+      localStorage.setItem(
+        "session-2-demographics",
+        JSON.stringify(demographics)
+      );
     }
-
-    router.push("/session-3");
-  }
-
-  async function saveSessionTwo(demographics: DemographicsData) {
-    const timestamp = new Date().toISOString();
-
-    const longRows = completedRanking.map((option, index) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
-      randomization_seed: randomizationSeed,
-      agreed_to_descriptions: agreedToDescriptions,
-      selected_rank: index + 1,
-      option_id: option.id,
-      cut_id: option.cutId || "",
-      seal_id: option.sealId || "",
-      title: option.title,
-      subtitle: option.subtitle || "",
-      cut_image_url: option.cutImageUrl || "",
-      seal_image_url: option.sealImageUrl || "",
-      seal_color: option.sealColor || "",
-      screen_started_at: option.screenStartedAt ?? "",
-      option_selected_at: option.optionSelectedAt ?? "",
-      purchase_confirmed_at: option.purchaseConfirmedAt ?? "",
-      time_spent_before_choice_ms: option.timeSpentBeforeChoiceMs ?? "",
-      time_spent_before_choice_seconds:
-        option.timeSpentBeforeChoiceSeconds ?? "",
-      time_taken_to_confirm_ms: option.timeTakenToConfirmMs ?? "",
-      time_taken_to_confirm_seconds:
-        option.timeTakenToConfirmSeconds ?? "",
-      changed_preference_before_confirming:
-        option.changedPreferenceBeforeConfirming ?? "",
-      initial_selected_option_id: option.initialSelectedOptionId ?? "",
-      final_confirmed_option_id: option.finalConfirmedOptionId ?? "",
-      gender: demographics.gender,
-      age_group: demographics.ageGroup,
-      education_level: demographics.educationLevel,
-      income_group: demographics.incomeGroup,
-      timestamp,
-    }));
-
-    const participantRow: Record<string, string | number> = {
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      method: "Seal descriptions + Choice experiment / Best-Worst Scaling ranking",
-      randomization_seed: randomizationSeed,
-      agreed_to_descriptions: agreedToDescriptions,
-
-      gender: demographics.gender,
-      age_group: demographics.ageGroup,
-      education_level: demographics.educationLevel,
-      income_group: demographics.incomeGroup,
-
-      seals_read_count: readSealIds.length,
-      all_seals_read: allSealsRead ? "Yes" : "No",
-
-      rank_1_option_id: completedRanking[0]?.id || "",
-      rank_1_cut_id: completedRanking[0]?.cutId || "",
-      rank_1_seal_id: completedRanking[0]?.sealId || "",
-      rank_1_title: completedRanking[0]?.title || "",
-
-      rank_2_option_id: completedRanking[1]?.id || "",
-      rank_2_cut_id: completedRanking[1]?.cutId || "",
-      rank_2_seal_id: completedRanking[1]?.sealId || "",
-      rank_2_title: completedRanking[1]?.title || "",
-
-      rank_3_option_id: completedRanking[2]?.id || "",
-      rank_3_cut_id: completedRanking[2]?.cutId || "",
-      rank_3_seal_id: completedRanking[2]?.sealId || "",
-      rank_3_title: completedRanking[2]?.title || "",
-
-      rank_4_option_id: completedRanking[3]?.id || "",
-      rank_4_cut_id: completedRanking[3]?.cutId || "",
-      rank_4_seal_id: completedRanking[3]?.sealId || "",
-      rank_4_title: completedRanking[3]?.title || "",
-
-      rank_5_option_id: completedRanking[4]?.id || "",
-      rank_5_cut_id: completedRanking[4]?.cutId || "",
-      rank_5_seal_id: completedRanking[4]?.sealId || "",
-      rank_5_title: completedRanking[4]?.title || "",
-
-      timestamp,
-    };
-
-    const sealReadingRows = sealReadingRecords.map((record) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      seal_id: record.sealId,
-      seal_name: record.sealName,
-      opened_description: "Yes",
-      opened_at: record.openedAt,
-      agreed_to_descriptions: agreedToDescriptions,
-      timestamp,
-    }));
-
-    const rankingSealClickRows = rankingSealClickRecords.map((record) => ({
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      phase: "ranking",
-      seal_id: record.sealId,
-      seal_name: record.sealName,
-      clicked_at: record.clickedAt,
-      total_clicks_this_seal: rankingSealClicks[record.sealId] || 1,
-      timestamp,
-    }));
-
-    addRankingTimingFields(participantRow, completedRanking);
-
-  const clickRows = rankingClickLogs.map((row) => ({
-      ...row,
-      participant_id: participantId,
-      location: participantLocation,
-      session_number: 2,
-      timestamp,
-    }));
-
-    const result = await saveWithRetry("/api/session-2/save", {
-      participantRow,
-      longRows,
-      sealReadingRows,
-      rankingSealClickRows,
-    });
-
-    if (clickRows.length > 0) {
-      await saveWithRetry("/api/click-logs/save", {
-        clickRows,
-      });
-    }
-
-    localStorage.setItem("session-2-ranking", JSON.stringify(longRows));
-    localStorage.setItem("session-2-demographics", JSON.stringify(demographics));
-    localStorage.setItem("session-2-seal-readings", JSON.stringify(sealReadingRows));
 
     if (result.queued) {
       alert(t("common.saveAlert"));
@@ -674,13 +626,36 @@ export default function SessionTwoDescriptionsPage() {
     setStep("completed");
   }
 
+  async function saveSessionTwoWithoutQuestionnaire(
+    trackingOverride?: RankingTrackingData
+  ) {
+    await saveSessionTwoData(
+      {
+        gender: "Collected in Session 3",
+        ageGroup: "Collected in Session 3",
+        educationLevel: "Collected in Session 3",
+        incomeGroup: "Collected in Session 3",
+      },
+      {
+        saveDemographicsLocally: false,
+      },
+      trackingOverride
+    );
+  }
+
+  async function saveSessionTwo(demographics: DemographicsData) {
+    await saveSessionTwoData(demographics, {
+      saveDemographicsLocally: true,
+    });
+  }
+
   return (
     <main className={`study-page location-${participantLocation.toLowerCase()}`}>
       <section className="study-shell">
         <StepTransition stepKey={step}>
         {step === "transition" && (
           <section className="complete-card session-transition-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.introBadge")}</div>
+            <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("s2.introBadge")}</div>
             <h2>{t("s2.introTitle")}</h2>
             <p>
               {t("s2.introDesc")}
@@ -688,7 +663,7 @@ export default function SessionTwoDescriptionsPage() {
             <button
               type="button"
               className="primary-button full-width-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+              style={{ background: getLocationColor(participantLocation) }}
               onClick={() => setStep("reading")}
             >
               {t("common.continue")}
@@ -700,21 +675,19 @@ export default function SessionTwoDescriptionsPage() {
           <section className="session-two-card">
             <div className="session-two-heading">
               <div>
+                <p className="session-two-step-label">
+                  {t("common.session")} 2
+                </p>
                 <h2>{t("s2.readTitle")}</h2>
                 <p>
                   {t("s2.readDesc")}
                 </p>
               </div>
 
-              <div className="read-counter" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
-                {readSealIds.length}/{seals.length} {t("s2.readCount")}
-              </div>
             </div>
 
             <div className="seal-description-grid">
               {randomizedReadingSeals.map((seal) => {
-                const wasRead = readSealIds.includes(seal.id);
-
                 return (
                   <button
                     key={seal.id}
@@ -723,10 +696,8 @@ export default function SessionTwoDescriptionsPage() {
                     onClick={() => openSealDescription(seal)}
                   >
                     <div className="seal-image-holder">
-                      <img src={seal.imageUrl} alt={t(seal.nameKey)} />
+                      <img src={seal.imageUrl} alt={t(seal.fullNameKey)} />
                     </div>
-
-                    <div className={wasRead ? "read-check" : "read-check read-check--empty"}>✓</div>
                   </button>
                 );
               })}
@@ -735,23 +706,30 @@ export default function SessionTwoDescriptionsPage() {
             <button
               type="button"
               className={allSealsRead ? "purchase-button" : "purchase-button disabled"}
-              style={allSealsRead ? { background: locationColors[participantLocation] ?? "#bb0b0b" } : undefined}
+              style={allSealsRead ? { background: getLocationColor(participantLocation) } : undefined}
               onClick={() => {
-                if (allSealsRead) {
-                  setStep("agreement");
-                }
+                handleReadingContinue();
               }}
             >
               {allSealsRead
                 ? t("s2.continueReady")
-                : t("s2.continueBlocked")}
+                : (
+                  <>
+                    <span>{t("s2.continueBlocked")}</span>
+                    <span className="button-progress-count">
+                      ({readSealIds.length}/{seals.length} {t("s2.readCount")})
+                    </span>
+                  </>
+                )}
             </button>
           </section>
         )}
 
         {step === "agreement" && (
-          <section className="complete-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.confirmBadge")}</div>
+          <section className="complete-card seal-agreement-card">
+            {participantLocation === "NMSU" && (
+              <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("s2.confirmBadge")}</div>
+            )}
             <h2>{t("s2.confirmTitle")}</h2>
             <p>
               {t("s2.confirmDesc")}
@@ -769,7 +747,7 @@ export default function SessionTwoDescriptionsPage() {
               <button
                 type="button"
                 className="primary-button"
-                style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+                style={{ background: getLocationColor(participantLocation) }}
                 onClick={handleAgreementYes}
               >
                 {t("s2.yes")}
@@ -784,61 +762,53 @@ export default function SessionTwoDescriptionsPage() {
               key={`${participantLocation}-${randomizationSeed}`}
               options={translatedOptions}
               sessionNumber={2}
+              showSessionLabel={false}
               title={t("s2.rankingTitle")}
               description={t("s2.rankingDesc")}
               location={participantLocation}
               participantId={participantId}
+              initialRanking={completedRanking}
+              initialClickLogs={rankingClickLogs}
+              initialTracking={rankingTracking ?? undefined}
+              initialProgress={rankingProgress ?? undefined}
+              onProgressChange={setRankingProgress}
               onRankingComplete={handleRankingComplete}
               onSealClick={(sealId) => {
                 const seal = getSealById(sealId);
                 if (seal) {
+                  const openedAt = new Date();
+                  rankingSealOpenedAtRef.current = {
+                    optionId:
+                      translatedOptions.find(
+                        (option) => option.sealId === seal.id
+                      )?.id || "",
+                    sealId: seal.id,
+                    sealName: t(seal.fullNameKey),
+                    openedAt,
+                  };
                   openSealDescription(seal);
                   setRankingSealClicks((prev) => ({ ...prev, [seal.id]: (prev[seal.id] || 0) + 1 }));
-                  setRankingSealClickRecords((prev) => [...prev, { sealId: seal.id, sealName: t(seal.nameKey), clickedAt: new Date().toISOString() }]);
+                  setRankingSealClickRecords((prev) => [...prev, { sealId: seal.id, sealName: t(seal.fullNameKey), clickedAt: openedAt.toISOString() }]);
                 }
               }}
-              clickedSealIds={new Set(Object.keys(rankingSealClicks))}
             />
           </section>
         )}
 
         {step === "final-confirmation" && (
-          <section className="complete-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s2.finalBadge")}</div>
+          <section className="complete-card final-confirmation-card">
+            {participantLocation === "NMSU" && (
+              <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("s2.finalBadge")}</div>
+            )}
             <h2>{t("s2.finalTitle")}</h2>
             <p>
               {t("s2.finalDesc")}
             </p>
 
-            <ol className="final-ranking-list">
-              {completedRanking.map((option, index) => (
-                <li key={option.id}>
-                  <strong style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>#{index + 1}</strong>
-                  <div className="final-ranking-images">
-                    {option.cutImageUrl && (
-                      <img src={option.cutImageUrl} alt={option.title} className="final-cut-img" />
-                    )}
-                    {option.sealImageUrl && (
-                      <button
-                        type="button"
-                        className="final-seal-zoom-btn"
-                        onClick={() => setZoomedSealId(zoomedSealId === option.id ? null : option.id)}
-                      >
-                        <img
-                          src={option.sealImageUrl}
-                          alt=""
-                          className={zoomedSealId === option.id ? "final-seal-img final-seal-zoomed" : "final-seal-img"}
-                        />
-                      </button>
-                    )}
-                  </div>
-                  <div className="final-ranking-text">
-                    <span>{option.title}</span>
-                    <small>{option.subtitle}</small>
-                  </div>
-                </li>
-              ))}
-            </ol>
+            <FinalRankingList
+              ranking={completedRanking}
+              locationColor={getLocationColor(participantLocation)}
+            />
 
             <div className="final-actions">
               <button
@@ -852,7 +822,7 @@ export default function SessionTwoDescriptionsPage() {
               <button
                 type="button"
                 className="primary-button"
-                style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+                style={{ background: getLocationColor(participantLocation) }}
                 onClick={handleFinalConfirmationYes}
                 disabled={isSavingFinal}
               >
@@ -863,19 +833,26 @@ export default function SessionTwoDescriptionsPage() {
         )}
 
         {step === "demographics" && (
-          <section className="complete-card">
-            <DemographicsForm onSubmit={saveSessionTwo} locationColor={locationColors[participantLocation] ?? "#bb0b0b"} />
+          <section className="complete-card demographics-card">
+            <DemographicsForm
+              onSubmit={saveSessionTwo}
+              locationColor={getLocationColor(participantLocation)}
+              initialData={demographicsDraft}
+              onProgressChange={setDemographicsDraft}
+            />
           </section>
         )}
 
         {step === "completed" && (
-          <section className="complete-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("common.completed")}</div>
+          <section className="complete-card completed-step-card">
+            {participantLocation === "NMSU" && (
+              <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("common.completed")}</div>
+            )}
             <h2>{t("s2.completedTitle")}</h2>
             <p>{t("common.clickContinue1")} <strong>{t("common.continue")}</strong> {t("common.clickContinue2")}</p>
 
             <div className="final-actions" style={{ gridTemplateColumns: "1fr" }}>
-              <a href="/session-3" className="primary-link-button" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
+              <a href="/session-3" className="primary-link-button" style={{ background: getLocationColor(participantLocation) }}>
                 {t("common.continue")}
               </a>
             </div>
@@ -885,24 +862,14 @@ export default function SessionTwoDescriptionsPage() {
       </section>
 
       {activeSeal && (
-        <div className="modal-backdrop">
-          <section className="modal-card seal-modal-card">
-            <div className="modal-seal-check">✓</div>
-            <img src={activeSeal.imageUrl} alt={t(activeSeal.nameKey)} />
-
-            <h2>{t(activeSeal.nameKey)}</h2>
-            <p>{t(activeSeal.descKey)}</p>
-
-            <button
-              type="button"
-              className="primary-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
-              onClick={closeSealDescription}
-            >
-              {t("s2.readBtn")}
-            </button>
-          </section>
-        </div>
+        <SealDescriptionModal
+          imageUrl={activeSeal.imageUrl}
+          name={t(activeSeal.fullNameKey)}
+          description={t(activeSeal.descriptionKey)}
+          buttonLabel={t("s2.readBtn")}
+          color={getLocationColor(participantLocation)}
+          onClose={closeSealDescription}
+        />
       )}
     </main>
   );

@@ -1,256 +1,87 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import RankingScreen, { ClickLogRow, RankingOption } from "@/components/RankingScreen";
+import RankingScreen, {
+  ClickLogRow,
+  RankingOption,
+  RankingProgressDraft,
+} from "@/components/RankingScreen";
 import StepTransition from "@/components/StepTransition";
 import DemographicsForm, { DemographicsData } from "@/components/DemographicsForm";
+import FinalRankingList from "@/components/FinalRankingList";
+import SealDescriptionModal from "@/components/SealDescriptionModal";
 import { seededShuffle } from "@/lib/randomization";
 import { saveWithRetry } from "@/lib/saveWithRetry";
-import { useLanguage, TranslationKey } from "@/lib/i18n";
-import { getLocationConfig } from "@/lib/locations";
+import { useLanguage } from "@/lib/i18n";
+import { getLocationColor, getLocationConfig } from "@/lib/locations";
+import { isCompleteRanking } from "@/lib/payloadValidation";
+import { calculatePrice, PRICE_CONDITIONS } from "@/lib/pricing";
+import { getSealDefinitions, type SealDefinition } from "@/lib/seals";
+import {
+  calculateParticipantTopSeals,
+  FALLBACK_TOP_SEALS,
+  type SealRankingRow,
+} from "@/lib/topSeals";
+import { createSessionThreeTrackingPayload } from "@/lib/sessionPayloads";
+import {
+  clearSurveyDraft,
+  loadSurveyDraft,
+  saveSurveyDraft,
+} from "@/lib/surveyDraft";
+import type {
+  BetweenScreenVisitRecord,
+  FinalConfirmationAttemptRecord,
+  RankingSnapshotItem,
+  RankingTrackingData,
+  SealInteractionRecord,
+} from "@/lib/sessionTracking";
+import Link from "next/link";
 
 type Step =
   | "transition"
   | "ranking"
+  | "final-confirmation"
   | "between-screens"
   | "pre-demographics"
   | "demographics"
   | "completed";
 
-const locationColors: Record<string, string> = {
-  PUCPR: "#bb0b0b",
-  UFBA: "#1a7a3a",
-  NMSU: "#bb0b0b",
-};
-
-type SealDefinition = {
+type ActiveSealInteractionDraft = {
+  screenIndex: number;
+  optionId: string;
   sealId: string;
   sealName: string;
-  sealColor: string;
-  sealImageUrl: string;
-  description: string;
-  nameKey: TranslationKey;
-  descKey: TranslationKey;
+  openedAt: string;
 };
 
-const PRICE_LEVELS = {
-  high: {
-    priceLevel: "high",
-    priceIncreasePercent: 20,
-  },
-  medium: {
-    priceLevel: "medium",
-    priceIncreasePercent: 10,
-  },
-  low: {
-    priceLevel: "low",
-    priceIncreasePercent: 5,
-  },
+type SessionThreeDraft = {
+  step: Step;
+  activeSealId: string | null;
+  topThreeSealIds: string[];
+  currentScreenIndex: number;
+  screenRankings: RankingOption[][];
+  screenClickLogs: ClickLogRow[][];
+  screenTrackings: Array<RankingTrackingData | undefined>;
+  screenProgresses: Array<RankingProgressDraft | undefined>;
+  demographics: DemographicsData;
+  finalConfirmationStartedAt: string | null;
+  betweenScreenStartedAt: string | null;
+  betweenScreenVisits: BetweenScreenVisitRecord[];
+  screenSealInteractions: SealInteractionRecord[][];
+  activeSealInteraction: ActiveSealInteractionDraft | null;
 };
 
-const priceConditions = [
-  {
-    conditionId: "3.1",
-    prices: [
-      PRICE_LEVELS.high,
-      PRICE_LEVELS.medium,
-      PRICE_LEVELS.low,
-    ],
-  },
-  {
-    conditionId: "3.2",
-    prices: [
-      PRICE_LEVELS.low,
-      PRICE_LEVELS.high,
-      PRICE_LEVELS.medium,
-    ],
-  },
-  {
-    conditionId: "3.3",
-    prices: [
-      PRICE_LEVELS.medium,
-      PRICE_LEVELS.low,
-      PRICE_LEVELS.high,
-    ],
-  },
-];
+const EMPTY_DEMOGRAPHICS: DemographicsData = {
+  gender: "",
+  ageGroup: "",
+  educationLevel: "",
+  incomeGroup: "",
+};
 
-function calculatePrice(basePrice: number, increasePercent: number) {
-  return Number((basePrice * (1 + increasePercent / 100)).toFixed(2));
-}
-
-const SEAL_DEFINITIONS_PUCPR: SealDefinition[] = [
-  {
-    sealId: "red-1",
-    sealName: "Angus",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/pucpr/a.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.short",
-    descKey: "seal.angus.desc",
-  },
-  {
-    sealId: "red-2",
-    sealName: "Bem-estar animal",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/pucpr/bea.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.short",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    sealId: "green-1",
-    sealName: "Tradicional",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/pucpr/cb.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.short",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    sealId: "green-2",
-    sealName: "Cultivada",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/pucpr/cc.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.short",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    sealId: "green-3",
-    sealName: "Orgânica",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/pucpr/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.short",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const SEAL_DEFINITIONS_UFBA: SealDefinition[] = [
-  {
-    sealId: "red-1",
-    sealName: "Angus",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/a.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.short",
-    descKey: "seal.angus.desc",
-  },
-  {
-    sealId: "red-2",
-    sealName: "Bem-estar animal",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/bea.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.short",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    sealId: "green-1",
-    sealName: "Tradicional",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/cb.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.short",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    sealId: "green-2",
-    sealName: "Cultivada",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/cc.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.short",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    sealId: "green-3",
-    sealName: "Orgânica",
-    sealColor: "green",
-    sealImageUrl: "/images/seals/ufba/o.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.short",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const SEAL_DEFINITIONS_NMSU: SealDefinition[] = [
-  {
-    sealId: "red-1",
-    sealName: "Angus",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/nmsu/angus.png",
-    description:
-      "Carne reconhecida pela maciez e sabor intensos e diferenciados característicos da raça Angus.",
-    nameKey: "seal.angus.short",
-    descKey: "seal.angus.desc",
-  },
-  {
-    sealId: "red-2",
-    sealName: "Bem-estar animal",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/nmsu/animal.png",
-    description:
-      "Proveniente de sistemas de produção que priorizam conforto, manejo adequado e bem-estar dos animais.",
-    nameKey: "seal.welfare.short",
-    descKey: "seal.welfare.desc",
-  },
-  {
-    sealId: "green-1",
-    sealName: "Tradicional",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/nmsu/beef.png",
-    description:
-      "Produto não possui qualquer tipo de certificação especial.",
-    nameKey: "seal.traditional.short",
-    descKey: "seal.traditional.desc",
-  },
-  {
-    sealId: "green-2",
-    sealName: "Cultivada",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/nmsu/cultured.png",
-    description:
-      "Produzida a partir do cultivo de células animais em ambiente controlado, sem a necessidade de abate.",
-    nameKey: "seal.cultivated.short",
-    descKey: "seal.cultivated.desc",
-  },
-  {
-    sealId: "green-3",
-    sealName: "Orgânica",
-    sealColor: "red",
-    sealImageUrl: "/images/seals/nmsu/organic.png",
-    description:
-      "Produzida em sistema que preserva o meio ambiente, sem uso de hormônios sintéticos ou antibióticos.",
-    nameKey: "seal.organic.short",
-    descKey: "seal.organic.desc",
-  },
-];
-
-const fallbackTopSeals = ["red-1", "red-2", "green-1"];
-
-function getPreviousRankings() {
-  const sessionOneRaw = localStorage.getItem("session-1-ranking");
-  const sessionTwoRaw = localStorage.getItem("session-2-ranking");
-
-  const sessionOneRows = sessionOneRaw ? JSON.parse(sessionOneRaw) : [];
-  const sessionTwoRows = sessionTwoRaw ? JSON.parse(sessionTwoRaw) : [];
-
-  return [...sessionOneRows, ...sessionTwoRows];
-}
-
-function getTopThreeSealsFromPreviousChoices() {
+function getTopThreeSealsFromPreviousChoices(
+  participantId: string,
+  location: string
+) {
   try {
     const sessionOneRaw = localStorage.getItem("session-1-ranking");
     const sessionTwoRaw = localStorage.getItem("session-2-ranking");
@@ -263,86 +94,27 @@ function getTopThreeSealsFromPreviousChoices() {
       ? JSON.parse(sessionTwoRaw)
       : [];
 
-    if (
-      !Array.isArray(sessionOneRows) ||
-      !Array.isArray(sessionTwoRows) ||
-      (sessionOneRows.length === 0 && sessionTwoRows.length === 0)
-    ) {
-      return fallbackTopSeals;
+    if (!Array.isArray(sessionOneRows) || !Array.isArray(sessionTwoRows)) {
+      return null;
     }
 
-    const SESSION_1_WEIGHT = 0.33;
-    const SESSION_2_WEIGHT = 0.67;
-
-    const weightedScores = new Map<string, number>();
-    const sessionTwoScores = new Map<string, number>();
-
-    function addWeightedScores(
-      rows: Array<{
-        seal_id?: string;
-        selected_rank?: number | string;
-      }>,
-      weight: number,
-      trackSessionTwo = false
-    ) {
-      for (const row of rows) {
-        const sealId = row.seal_id;
-
-        if (!sealId) continue;
-
-        const selectedRank = Number(row.selected_rank ?? 99);
-
-        // Rank 1 = 5 points, rank 2 = 4, ... rank 5 = 1.
-        const rankScore = Math.max(0, 6 - selectedRank);
-        const weightedScore = rankScore * weight;
-
-        weightedScores.set(
-          sealId,
-          (weightedScores.get(sealId) ?? 0) + weightedScore
-        );
-
-        if (trackSessionTwo) {
-          sessionTwoScores.set(
-            sealId,
-            (sessionTwoScores.get(sealId) ?? 0) + rankScore
-          );
-        }
-      }
-    }
-
-    addWeightedScores(sessionOneRows, SESSION_1_WEIGHT);
-    addWeightedScores(sessionTwoRows, SESSION_2_WEIGHT, true);
-
-    const topSealIds = Array.from(weightedScores.entries())
-      .sort((a, b) => {
-        const weightedDifference = b[1] - a[1];
-
-        if (weightedDifference !== 0) {
-          return weightedDifference;
-        }
-
-        const sessionTwoDifference =
-          (sessionTwoScores.get(b[0]) ?? 0) -
-          (sessionTwoScores.get(a[0]) ?? 0);
-
-        if (sessionTwoDifference !== 0) {
-          return sessionTwoDifference;
-        }
-
-        return a[0].localeCompare(b[0]);
-      })
-      .map(([sealId]) => sealId)
-      .slice(0, 3);
-
-    const missingFallbacks = fallbackTopSeals.filter(
-      (sealId) => !topSealIds.includes(sealId)
-    );
-
-    return [...topSealIds, ...missingFallbacks].slice(0, 3);
+    return calculateParticipantTopSeals(
+      sessionOneRows as SealRankingRow[],
+      sessionTwoRows as SealRankingRow[],
+      participantId,
+      location
+    )?.topSealIds ?? null;
   } catch (error) {
     console.error("Could not calculate weighted top seals:", error);
-    return fallbackTopSeals;
+    return null;
   }
+}
+
+function hasSameSealOrder(first: string[], second: string[]) {
+  return (
+    first.length === second.length &&
+    first.every((sealId, index) => sealId === second[index])
+  );
 }
 
 export default function SessionThreePage() {
@@ -351,52 +123,190 @@ export default function SessionThreePage() {
   const [participantLocation, setParticipantLocation] = useState("");
   const [step, setStep] = useState<Step>("transition");
   const [activeSeal, setActiveSeal] = useState<SealDefinition | null>(null);
-  const [topThreeSealIds, setTopThreeSealIds] = useState<string[]>(fallbackTopSeals);
+  const [topThreeSealIds, setTopThreeSealIds] = useState<string[]>(FALLBACK_TOP_SEALS);
   const [currentScreenIndex, setCurrentScreenIndex] = useState(0);
   const [screenRankings, setScreenRankings] = useState<RankingOption[][]>([]);
   const [screenClickLogs, setScreenClickLogs] = useState<ClickLogRow[][]>([]);
+  const [screenTrackings, setScreenTrackings] = useState<
+    Array<RankingTrackingData | undefined>
+  >([]);
+  const [screenProgresses, setScreenProgresses] = useState<
+    Array<RankingProgressDraft | undefined>
+  >([]);
+  const [demographicsDraft, setDemographicsDraft] =
+    useState<DemographicsData>(EMPTY_DEMOGRAPHICS);
+  const [draftReady, setDraftReady] = useState(false);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const advancingRef = useRef(false);
+  const finalConfirmationStartedAtRef = useRef<Date | null>(null);
+  const betweenScreenStartedAtRef = useRef<Date | null>(null);
+  const betweenScreenVisitsRef = useRef<BetweenScreenVisitRecord[]>([]);
+  const screenSealInteractionsRef = useRef<SealInteractionRecord[][]>([]);
+  const activeSealInteractionRef = useRef<{
+    screenIndex: number;
+    optionId: string;
+    sealId: string;
+    sealName: string;
+    openedAt: Date;
+  } | null>(null);
 
   useEffect(() => {
     async function loadParticipantAndTopSeals() {
       const id = localStorage.getItem("participantId") || "DEMO-PARTICIPANT";
       const location = localStorage.getItem("participantLocation") || "UNKNOWN";
+      const draft = loadSurveyDraft<SessionThreeDraft>(
+        "session-3",
+        id,
+        location
+      );
 
       setParticipantId(id);
       setParticipantLocation(location);
 
+      const localTopSealIds = getTopThreeSealsFromPreviousChoices(
+        id,
+        location
+      );
+
+      if (draft) {
+        if (
+          localTopSealIds &&
+          !hasSameSealOrder(draft.topThreeSealIds ?? [], localTopSealIds)
+        ) {
+          clearSurveyDraft("session-3");
+          setTopThreeSealIds(localTopSealIds);
+          setDraftReady(true);
+          return;
+        }
+
+        setStep(draft.step);
+        setTopThreeSealIds(draft.topThreeSealIds ?? FALLBACK_TOP_SEALS);
+        setCurrentScreenIndex(draft.currentScreenIndex ?? 0);
+        setScreenRankings(draft.screenRankings ?? []);
+        setScreenClickLogs(draft.screenClickLogs ?? []);
+        setScreenTrackings(draft.screenTrackings ?? []);
+        setScreenProgresses(draft.screenProgresses ?? []);
+        setDemographicsDraft(draft.demographics ?? EMPTY_DEMOGRAPHICS);
+        setActiveSeal(
+          getSealDefinitions(location).find(
+            (seal) => seal.id === draft.activeSealId
+          ) ?? null
+        );
+        finalConfirmationStartedAtRef.current = draft.finalConfirmationStartedAt
+          ? new Date(draft.finalConfirmationStartedAt)
+          : null;
+        betweenScreenStartedAtRef.current = draft.betweenScreenStartedAt
+          ? new Date(draft.betweenScreenStartedAt)
+          : null;
+        betweenScreenVisitsRef.current = [...(draft.betweenScreenVisits ?? [])];
+        screenSealInteractionsRef.current = [
+          ...(draft.screenSealInteractions ?? []),
+        ];
+        activeSealInteractionRef.current = draft.activeSealInteraction
+          ? {
+              ...draft.activeSealInteraction,
+              openedAt: new Date(draft.activeSealInteraction.openedAt),
+            }
+          : null;
+        setDraftReady(true);
+        return;
+      }
+
+      if (localTopSealIds) {
+        setTopThreeSealIds(localTopSealIds);
+        setDraftReady(true);
+        return;
+      }
+
       try {
         const response = await fetch(
-          `/api/session-3/top-seals?participantId=${encodeURIComponent(id)}`
+          `/api/session-3/top-seals?participantId=${encodeURIComponent(id)}&location=${encodeURIComponent(location)}`
         );
 
         if (!response.ok) {
-          setTopThreeSealIds(getTopThreeSealsFromPreviousChoices());
+          setTopThreeSealIds(FALLBACK_TOP_SEALS);
           return;
         }
 
         const data = await response.json();
 
-        if (Array.isArray(data.topSealIds) && data.topSealIds.length >= 3) {
+        const apiHasParticipantData =
+          data.hasParticipantData === true ||
+          (data.weightedScores &&
+            typeof data.weightedScores === "object" &&
+            Object.keys(data.weightedScores).length > 0);
+
+        if (
+          apiHasParticipantData &&
+          Array.isArray(data.topSealIds) &&
+          data.topSealIds.length >= 3
+        ) {
           setTopThreeSealIds(data.topSealIds.slice(0, 3));
         } else {
-          setTopThreeSealIds(getTopThreeSealsFromPreviousChoices());
+          setTopThreeSealIds(FALLBACK_TOP_SEALS);
         }
       } catch {
-        setTopThreeSealIds(getTopThreeSealsFromPreviousChoices());
+        setTopThreeSealIds(FALLBACK_TOP_SEALS);
+      } finally {
+        setDraftReady(true);
       }
     }
 
     loadParticipantAndTopSeals();
   }, []);
 
+  useEffect(() => {
+    if (step === "final-confirmation") {
+      finalConfirmationStartedAtRef.current ??= new Date();
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (!draftReady || !participantId) return;
+
+    const activeInteraction = activeSealInteractionRef.current;
+    saveSurveyDraft<SessionThreeDraft>(
+      "session-3",
+      participantId,
+      participantLocation,
+      {
+        step,
+        activeSealId: activeSeal?.id ?? null,
+        topThreeSealIds,
+        currentScreenIndex,
+        screenRankings,
+        screenClickLogs,
+        screenTrackings,
+        screenProgresses,
+        demographics: demographicsDraft,
+        finalConfirmationStartedAt:
+          finalConfirmationStartedAtRef.current?.toISOString() ?? null,
+        betweenScreenStartedAt:
+          betweenScreenStartedAtRef.current?.toISOString() ?? null,
+        betweenScreenVisits: [...betweenScreenVisitsRef.current],
+        screenSealInteractions: [...screenSealInteractionsRef.current],
+        activeSealInteraction: activeInteraction
+          ? { ...activeInteraction, openedAt: activeInteraction.openedAt.toISOString() }
+          : null,
+      }
+    );
+  }, [
+    activeSeal,
+    currentScreenIndex,
+    demographicsDraft,
+    draftReady,
+    participantId,
+    participantLocation,
+    screenClickLogs,
+    screenProgresses,
+    screenRankings,
+    screenTrackings,
+    step,
+    topThreeSealIds,
+  ]);
+
   const sealDefinitions = useMemo(
-    () => participantLocation === "UFBA"
-      ? SEAL_DEFINITIONS_UFBA
-      : participantLocation === "NMSU"
-      ? SEAL_DEFINITIONS_NMSU
-      : SEAL_DEFINITIONS_PUCPR,
+    () => getSealDefinitions(participantLocation),
     [participantLocation]
   );
 
@@ -420,7 +330,7 @@ export default function SessionThreePage() {
   const allScreensOptions = useMemo(() => {
     const selectedSeals = topThreeSealIds
       .map((sealId) =>
-        sealDefinitions.find((seal) => seal.sealId === sealId)
+        sealDefinitions.find((seal) => seal.id === sealId)
       )
       .filter(Boolean) as SealDefinition[];
 
@@ -428,7 +338,7 @@ export default function SessionThreePage() {
       return [];
     }
 
-    const conditionScreens = priceConditions.map((condition) => {
+    const conditionScreens = PRICE_CONDITIONS.map((condition) => {
       const conditionOptions: RankingOption[] = selectedSeals.map(
         (seal, sealIndex) => {
           const priceLevel = condition.prices[sealIndex];
@@ -438,14 +348,14 @@ export default function SessionThreePage() {
           );
 
           return {
-            id: `session-3-condition-${condition.conditionId}-${seal.sealId}-${priceLevel.priceIncreasePercent}`,
+            id: `session-3-condition-${condition.conditionId}-${seal.id}-${priceLevel.priceIncreasePercent}`,
             cutId: `price-cut-${sealIndex + 1}`,
-            sealId: seal.sealId,
+            sealId: seal.id,
             title: cutTitle,
-            subtitle: t(seal.nameKey),
+            subtitle: t(seal.shortNameKey),
             cutImageUrl,
-            sealImageUrl: seal.sealImageUrl,
-            sealColor: seal.sealColor,
+            sealImageUrl: seal.imageUrl,
+            sealColor: seal.color,
             price,
             priceCurrency: priceConfig.currencyCode,
             priceCurrencySymbol: priceConfig.currencySymbol,
@@ -484,39 +394,184 @@ export default function SessionThreePage() {
   ]);
 
   function getSealById(sealId?: string) {
-    return sealDefinitions.find((seal) => seal.sealId === sealId) || null;
+    return sealDefinitions.find((seal) => seal.id === sealId) || null;
   }
 
   function handleRankingComplete(
     ranking: RankingOption[],
-    clickLogs: ClickLogRow[] = []
+    clickLogs: ClickLogRow[] = [],
+    tracking?: RankingTrackingData
   ) {
-    const newRankings = [...screenRankings, ranking];
-    const newClickLogs = [...screenClickLogs, clickLogs];
+    const newRankings = [...screenRankings];
+    const newClickLogs = [...screenClickLogs];
+    const newTrackings = [...screenTrackings];
+    const modalSealInteractions =
+      screenSealInteractionsRef.current[currentScreenIndex] ?? [];
+
+    newRankings[currentScreenIndex] = ranking;
+    newClickLogs[currentScreenIndex] = clickLogs;
+    newTrackings[currentScreenIndex] = tracking
+      ? {
+          ...tracking,
+          sealInteractions: [
+            ...tracking.sealInteractions,
+            ...modalSealInteractions,
+          ],
+        }
+      : undefined;
+    screenSealInteractionsRef.current[currentScreenIndex] = [];
 
     setScreenRankings(newRankings);
     setScreenClickLogs(newClickLogs);
+    setScreenTrackings(newTrackings);
+    setScreenProgresses((current) => {
+      const nextProgresses = [...current];
+      nextProgresses[currentScreenIndex] = undefined;
+      return nextProgresses;
+    });
 
     advancingRef.current = false;
     setIsAdvancing(false);
 
-    if (newRankings.length < 3) {
+    setStep("final-confirmation");
+  }
+
+  function createRankingSnapshot(
+    ranking: RankingOption[]
+  ): RankingSnapshotItem[] {
+    return ranking.map((option) => ({
+      optionId: option.id,
+      sealId: option.sealId || "",
+      choiceName: option.subtitle || option.title,
+    }));
+  }
+
+  function recordFinalConfirmation(
+    response: FinalConfirmationAttemptRecord["response"]
+  ) {
+    const tracking = screenTrackings[currentScreenIndex];
+
+    if (!tracking) return null;
+
+    const respondedAt = new Date();
+    const startedAt = finalConfirmationStartedAtRef.current ?? respondedAt;
+    const updatedTracking: RankingTrackingData = {
+      ...tracking,
+      finalConfirmationAttempts: [
+        ...(tracking.finalConfirmationAttempts ?? []),
+        {
+          ranking: createRankingSnapshot(
+            screenRankings[currentScreenIndex] ?? []
+          ),
+          startedAt: startedAt.toISOString(),
+          respondedAt: respondedAt.toISOString(),
+          durationMs: Math.max(
+            0,
+            respondedAt.getTime() - startedAt.getTime()
+          ),
+          response,
+        },
+      ],
+    };
+    const newTrackings = [...screenTrackings];
+    newTrackings[currentScreenIndex] = updatedTracking;
+    setScreenTrackings(newTrackings);
+    return updatedTracking;
+  }
+
+  function handleFinalConfirmationNo() {
+    recordFinalConfirmation("No");
+    finalConfirmationStartedAtRef.current = null;
+    setStep("ranking");
+  }
+
+  function handleFinalConfirmationYes() {
+    recordFinalConfirmation("Yes");
+
+    if (currentScreenIndex < 2) {
+      betweenScreenStartedAtRef.current = new Date();
       setStep("between-screens");
     } else {
       setStep("pre-demographics");
     }
   }
 
+  function closeActiveSeal() {
+    const interaction = activeSealInteractionRef.current;
+
+    if (interaction) {
+      const closedAt = new Date();
+      const screenInteractions =
+        screenSealInteractionsRef.current[interaction.screenIndex] ?? [];
+
+      screenSealInteractionsRef.current[interaction.screenIndex] = [
+        ...screenInteractions,
+        {
+          optionId: interaction.optionId,
+          sealId: interaction.sealId,
+          sealName: interaction.sealName,
+          openedAt: interaction.openedAt.toISOString(),
+          closedAt: closedAt.toISOString(),
+          durationMs: Math.max(
+            0,
+            closedAt.getTime() - interaction.openedAt.getTime()
+          ),
+        },
+      ];
+      activeSealInteractionRef.current = null;
+    }
+
+    setActiveSeal(null);
+  }
+
   function handleContinueToNextScreen() {
     if (advancingRef.current) return;
     advancingRef.current = true;
     setIsAdvancing(true);
+    const completedAt = new Date();
+    const startedAt = betweenScreenStartedAtRef.current ?? completedAt;
+
+    betweenScreenVisitsRef.current.push({
+      fromScreen: currentScreenIndex + 1,
+      toScreen: currentScreenIndex + 2,
+      startedAt: startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: Math.max(0, completedAt.getTime() - startedAt.getTime()),
+    });
+    betweenScreenStartedAtRef.current = null;
     setCurrentScreenIndex((prev) => prev + 1);
     setStep("ranking");
   }
 
   async function saveSessionThree(demographics: DemographicsData) {
+    const incompleteScreenIndex = [0, 1, 2].find(
+      (index) => !isCompleteRanking(screenRankings[index], 3)
+    );
+
+    if (incompleteScreenIndex !== undefined) {
+      alert(t("common.validationError"));
+      setCurrentScreenIndex(incompleteScreenIndex);
+      setStep("ranking");
+      return;
+    }
+
+    const unconfirmedScreenIndex = [0, 1, 2].find((index) => {
+      const attempts = screenTrackings[index]?.finalConfirmationAttempts ?? [];
+      return attempts.at(-1)?.response !== "Yes";
+    });
+
+    if (unconfirmedScreenIndex !== undefined) {
+      alert(t("common.validationError"));
+      setCurrentScreenIndex(unconfirmedScreenIndex);
+      setStep("final-confirmation");
+      return;
+    }
+
     const timestamp = new Date().toISOString();
+    const surveyStartedAt =
+      localStorage.getItem("surveyStartedAt") ||
+      screenTrackings[0]?.rankingStartedAt ||
+      timestamp;
 
     const longRows = screenRankings.flatMap((ranking, screenIdx) =>
       ranking.map((option, rankIdx) => ({
@@ -643,6 +698,22 @@ export default function SessionThreePage() {
       });
     });
 
+    const trackingPayload = createSessionThreeTrackingPayload({
+      participantId,
+      participantLocation,
+      timestamp,
+      screens: screenRankings.map((ranking, screenIdx) => ({
+        screenNumber: screenIdx + 1,
+        conditionId: allScreensOptions[screenIdx]?.conditionId || "",
+        ranking,
+        initialDisplayOrder: allScreensOptions[screenIdx]?.options ?? [],
+        tracking: screenTrackings[screenIdx],
+      })),
+      betweenScreenVisits: betweenScreenVisitsRef.current,
+    });
+
+    Object.assign(participantRow, trackingPayload.participantFields);
+
     const clickRows = screenClickLogs.flatMap((screenRows, screenIdx) =>
       screenRows.map((row) => ({
         ...row,
@@ -661,7 +732,18 @@ export default function SessionThreePage() {
     const sessionResult = await saveWithRetry("/api/session-3/save", {
       participantRow,
       longRows,
+      decisionAttemptRows: trackingPayload.decisionAttemptRows,
+      sealInteractionRows: trackingPayload.sealInteractionRows,
+      preselectionReorderRows: trackingPayload.preselectionReorderRows,
+      finalConfirmationRows: trackingPayload.finalConfirmationRows,
+      rankingRevisionRows: trackingPayload.rankingRevisionRows,
+      revisionReorderRows: trackingPayload.revisionReorderRows,
     });
+
+    if (sessionResult.validationError) {
+      alert(t("common.validationError"));
+      return;
+    }
 
     if (clickRows.length > 0) {
       await saveWithRetry("/api/click-logs/save", {
@@ -676,7 +758,14 @@ export default function SessionThreePage() {
       participantId,
       location: participantLocation,
       demographics,
+      surveyStartedAt,
+      surveyCompletedAt: timestamp,
     });
+
+    if (fullSurveyResult.validationError) {
+      alert(t("common.validationError"));
+      return;
+    }
 
     if (sessionResult.queued || fullSurveyResult.queued) {
       alert(t("common.saveAlert"));
@@ -691,7 +780,7 @@ export default function SessionThreePage() {
         <StepTransition stepKey={step}>
         {step === "transition" && (
           <section className="complete-card session-transition-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s3.introBadge")}</div>
+            <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("s3.introBadge")}</div>
             <h2>{t("s3.introTitle")}</h2>
             <p>
               {t("s3.introDesc")}
@@ -699,7 +788,7 @@ export default function SessionThreePage() {
             <button
               type="button"
               className="primary-button full-width-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+              style={{ background: getLocationColor(participantLocation) }}
               onClick={() => setStep("ranking")}
             >
               {t("common.continue")}
@@ -714,46 +803,136 @@ export default function SessionThreePage() {
               key={`${participantLocation}-screen-${currentScreenIndex}`}
               options={allScreensOptions[currentScreenIndex].options}
               sessionNumber={3}
+              showSessionLabel={false}
               sessionSuffix={`${t("s3.choiceSuffix")} ${currentScreenIndex + 1} ${t("s3.choiceOf")} 3`}
               title={t("s3.rankingTitle")}
-              description={t("s3.rankingDesc")}
+              progressLabel={`${t("s3.round")} ${currentScreenIndex + 1} ${t("s3.choiceOf")} 3`}
+              description={t(
+                currentScreenIndex === 0
+                  ? "s3.rankingDesc"
+                  : "s3.rankingDescLater"
+              )}
               location={participantLocation}
               participantId={participantId}
               showPriceInCart
+              initialRanking={screenRankings[currentScreenIndex] ?? []}
+              initialClickLogs={screenClickLogs[currentScreenIndex] ?? []}
+              initialTracking={screenTrackings[currentScreenIndex]}
+              initialProgress={screenProgresses[currentScreenIndex]}
+              onProgressChange={(progress) => {
+                setScreenProgresses((current) => {
+                  const nextProgresses = [...current];
+                  nextProgresses[currentScreenIndex] = progress;
+                  return nextProgresses;
+                });
+              }}
               onRankingComplete={handleRankingComplete}
               onSealClick={(sealId) => {
                 const seal = getSealById(sealId);
-                if (seal) setActiveSeal(seal);
+                const option = allScreensOptions[
+                  currentScreenIndex
+                ]?.options.find((item) => item.sealId === sealId);
+
+                if (seal && option) {
+                  activeSealInteractionRef.current = {
+                    screenIndex: currentScreenIndex,
+                    optionId: option.id,
+                    sealId: seal.id,
+                    sealName: t(seal.shortNameKey),
+                    openedAt: new Date(),
+                  };
+                  setActiveSeal(seal);
+                }
               }}
             />
           </section>
         )}
 
+        {step === "final-confirmation" && (
+          <section className="complete-card final-confirmation-card session-three-final-confirmation">
+            {participantLocation === "NMSU" && (
+              <div
+                className="badge"
+                style={{ background: getLocationColor(participantLocation) }}
+              >
+                {t("s1.badge")}
+              </div>
+            )}
+            <h2>{t("s1.confirmTitle")}</h2>
+            <p>{t("s1.confirmDesc")}</p>
+
+            <FinalRankingList
+              ranking={screenRankings[currentScreenIndex] ?? []}
+              locationColor={getLocationColor(participantLocation)}
+              showPrice
+            />
+
+            <div className="final-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleFinalConfirmationNo}
+              >
+                {t("s1.no")}
+              </button>
+
+              <button
+                type="button"
+                className="primary-button"
+                style={{ background: getLocationColor(participantLocation) }}
+                onClick={handleFinalConfirmationYes}
+              >
+                {t("s1.yes")}
+              </button>
+            </div>
+          </section>
+        )}
+
         {step === "between-screens" && (
-          <section className="complete-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s3.choiceSuffix")} {screenRankings.length} {t("s3.choiceOf")} 3 {t("s3.betweenBadge")}</div>
-            <h2>{t("s3.betweenTitle")}</h2>
+          <section className="complete-card between-choices-card">
+            <div className="badge" style={{ background: getLocationColor(participantLocation) }}>{t("s3.round")} {screenRankings.length + 1} {t("s3.choiceOf")} 3</div>
+            {participantLocation === "NMSU" && <h2>{t("s3.betweenTitle")}</h2>}
             <p>
-              {t("s3.betweenDesc1")} {screenRankings.length} {t("s3.betweenDesc2")}
+              {participantLocation === "NMSU" ? (
+                <>
+                  {t("s3.betweenDesc1")} {screenRankings.length} {t("s3.betweenDesc2")}
+                </>
+              ) : (
+                <>
+                  {t("s3.betweenDesc1")} {screenRankings.length}. {t("s3.betweenDesc2")}
+                </>
+              )}
             </p>
 
             <button
               type="button"
               className="primary-button full-width-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+              style={{ background: getLocationColor(participantLocation) }}
               onClick={handleContinueToNextScreen}
               disabled={isAdvancing}
             >
               {isAdvancing
                 ? t("s3.loading")
-                : `${t("s3.goToChoice")} ${screenRankings.length + 1}`}
+                : t(
+                    screenRankings.length === 1
+                      ? "s3.goToSecondRound"
+                      : "s3.goToThirdRound"
+                  )}
             </button>
           </section>
         )}
 
         {step === "pre-demographics" && (
-          <section className="complete-card" style={{ textAlign: "left" }}>
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("s3.preDemoBadge")}</div>
+          <section className="complete-card pre-demographics-card">
+            <div
+              className="badge"
+              style={{
+                background: getLocationColor(participantLocation),
+                color: "#ffffff",
+              }}
+            >
+              {t("s3.preDemoBadge")}
+            </div>
             <h2>{t("s3.preDemoTitle")}</h2>
             <p>
               {t("s3.preDemoDesc")}
@@ -762,7 +941,7 @@ export default function SessionThreePage() {
             <button
               type="button"
               className="primary-button full-width-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
+              style={{ background: getLocationColor(participantLocation) }}
               onClick={() => setStep("demographics")}
             >
               {t("common.continue")}
@@ -772,19 +951,32 @@ export default function SessionThreePage() {
 
         {step === "demographics" && (
           <section className="complete-card">
-            <DemographicsForm onSubmit={saveSessionThree} locationColor={locationColors[participantLocation] ?? "#bb0b0b"} />
+            <DemographicsForm
+              onSubmit={saveSessionThree}
+              locationColor={getLocationColor(participantLocation)}
+              initialData={demographicsDraft}
+              onProgressChange={setDemographicsDraft}
+            />
           </section>
         )}
 
         {step === "completed" && (
           <section className="complete-card">
-            <div className="badge" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>{t("common.completed")}</div>
+            <div
+              className="badge"
+              style={{
+                background: getLocationColor(participantLocation),
+                color: "#ffffff",
+              }}
+            >
+              {t("common.completed")}
+            </div>
             <h2 style={{ marginTop: "16px" }}>{t("s3.completedTitle")}</h2>
 
             <div style={{ marginTop: "24px" }}>
-              <a href="/" className="primary-link-button" style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}>
+              <Link href="/" className="primary-link-button" style={{ background: getLocationColor(participantLocation) }}>
                 {t("s3.finish")}
-              </a>
+              </Link>
             </div>
           </section>
         )}
@@ -792,24 +984,14 @@ export default function SessionThreePage() {
       </section>
 
       {activeSeal && (
-        <div className="modal-backdrop">
-          <section className="modal-card seal-modal-card">
-            <div className="modal-seal-check">✓</div>
-            <img src={activeSeal.sealImageUrl} alt={t(activeSeal.nameKey)} />
-
-            <h2>{t(activeSeal.nameKey)}</h2>
-            <p>{t(activeSeal.descKey)}</p>
-
-            <button
-              type="button"
-              className="primary-button"
-              style={{ background: locationColors[participantLocation] ?? "#bb0b0b" }}
-              onClick={() => setActiveSeal(null)}
-            >
-              {t("s3.readBtn")}
-            </button>
-          </section>
-        </div>
+        <SealDescriptionModal
+          imageUrl={activeSeal.imageUrl}
+          name={t(activeSeal.shortNameKey)}
+          description={t(activeSeal.descriptionKey)}
+          buttonLabel={t("s3.readBtn")}
+          color={getLocationColor(participantLocation)}
+          onClose={closeActiveSeal}
+        />
       )}
     </main>
   );

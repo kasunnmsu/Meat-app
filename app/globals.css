@@ -6,6 +6,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
+  overscroll-behavior-y: none;
   font-family: Arial, Helvetica, sans-serif;
   background: #f4f1ea;
   color: #1f2933;
@@ -20,6 +21,164 @@ button,
 select,
 input {
   font: inherit;
+}
+
+html body .study-page :is(
+  .ranking-toolbar h2,
+  .cart-header h3,
+  .complete-card h2,
+  .session-two-heading h2,
+  .demographics-form .form-intro h2
+) {
+  font-size: 20px;
+}
+
+.device-settings-widget {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 80;
+}
+
+.device-settings-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #d8c8b4;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2a1d14;
+  font-size: 25px;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(42, 29, 20, 0.16);
+}
+
+.device-settings-button svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.device-settings-panel {
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 28px));
+  margin-top: 10px;
+  padding: 18px;
+  border: 1px solid #d8c8b4;
+  border-radius: 18px;
+  background: #ffffff;
+  color: #2a1d14;
+  box-shadow: 0 20px 50px rgba(42, 29, 20, 0.22);
+}
+
+.device-settings-panel > strong {
+  font-size: 18px;
+}
+
+.device-settings-panel > p {
+  margin: -6px 0 2px;
+  color: #6b5b4c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.device-settings-panel label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #eadfce;
+  border-radius: 14px;
+  background: #f7f3ec;
+  cursor: pointer;
+}
+
+.device-settings-panel label > span {
+  display: grid;
+  gap: 3px;
+}
+
+.device-settings-panel label small {
+  color: #6b5b4c;
+  line-height: 1.35;
+}
+
+.device-settings-panel label input {
+  margin-top: 3px;
+}
+
+.device-settings-panel > button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background: #2a1d14;
+  color: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.device-settings-pin-form {
+  display: grid;
+  gap: 10px;
+}
+
+.device-settings-pin-request {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #eadfce;
+  border-radius: 14px;
+  background: #fffaf2;
+}
+
+.device-settings-pin-request > p {
+  margin: 0;
+  color: #6b5b4c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.device-settings-panel .device-settings-pin-label {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #2a1d14;
+  font-weight: 800;
+  cursor: default;
+}
+
+.device-settings-pin-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 13px;
+  border: 1px solid #d8c8b4;
+  border-radius: 13px;
+  background: #ffffff;
+  color: #2a1d14;
+}
+
+.device-settings-pin-form button {
+  min-height: 46px;
+  border: 0;
+  border-radius: 13px;
+  background: #2a1d14;
+  color: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.device-settings-error {
+  color: #bb0b0b;
+  font-weight: 800;
 }
 
 .home-page {
@@ -519,11 +678,24 @@ input {
   font-weight: 800;
 }
 
+.session-two-step-label {
+  margin: 0 0 6px;
+  color: #2a1d14;
+  font-weight: 800;
+}
+
 .ranking-toolbar h2 {
   margin: 0;
   font-size: 24px;
   font-weight: 800;
   color: #2a1d14;
+}
+
+.ranking-toolbar .ranking-progress-label {
+  margin: 4px 0 6px;
+  color: #6b5b4c;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .ranking-toolbar button {
@@ -683,6 +855,18 @@ input {
   color: #2f4f2f;
 }
 
+.study-page .session-three-ranking .product-info strong {
+  color: #2f4f2f;
+}
+
+.study-page .selection-cart--with-price .cart-item-info .cart-item-price {
+  color: #2f4f2f !important;
+}
+
+.study-page .session-three-final-confirmation .final-ranking-price {
+  color: #2f4f2f;
+}
+
 .select-button {
   margin-top: 0px;
   width: 100%;
@@ -738,23 +922,6 @@ input {
   }
 }
 
-.modal-seal-check {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 36px;
-  height: 36px;
-  border: 2px solid #1a7a3a;
-  border-radius: 999px;
-  color: #1a7a3a;
-  font-size: 18px;
-  font-weight: 900;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-}
-
 .modal-card h2 {
   margin: 0;
   font-size: 30px;
@@ -800,6 +967,10 @@ input {
   line-height: 1.9;
 }
 
+.pre-demographics-card {
+  text-align: center;
+}
+
 .session-transition-card {
   text-align: center;
   max-width: 480px;
@@ -833,6 +1004,30 @@ input {
   font-weight: 900;
 }
 
+.final-thank-you-card {
+  text-align: center;
+}
+
+.final-thank-you-card h2 {
+  margin: 0;
+}
+
+.final-thank-you-card p {
+  margin: 12px auto 0;
+  font-size: 18px;
+}
+
+.final-thank-you-actions {
+  margin-top: 28px;
+}
+
+.final-thank-you-card .primary-link-button {
+  margin-top: 28px;
+  min-width: 180px;
+  padding: 18px 30px;
+  font-size: 18px;
+}
+
 
 .ranking-layout {
   display: grid;
@@ -862,7 +1057,7 @@ input {
 
 .cart-header p {
   margin: 0 0 4px;
-  color: #d8c8b4;
+  color: #000000;
   font-weight: 800;
   font-size: 14px;
 }
@@ -911,6 +1106,13 @@ input {
   list-style: none;
 }
 
+.cart-reorder-instruction {
+  margin: -6px 0 12px;
+  color: #6b5b4c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .cart-item {
   display: grid;
   grid-template-columns: 48px 1fr 26px;
@@ -921,16 +1123,90 @@ input {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.cart-list--reorderable .cart-item {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+
+.cart-item--draggable {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border: 1px solid transparent;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.cart-item--dragging {
+  z-index: 3;
+  position: relative;
+  cursor: grabbing;
+  transform: translateY(-4px) scale(1.035);
+  background: #ffffff;
+  border-color: #000000;
+  box-shadow: 0 20px 42px rgba(42, 29, 20, 0.28);
+}
+
+.cart-item--dragging .cart-rank {
+  background: #ead8c4;
+  color: #000000;
+}
+
 .cart-rank {
   width: 48px;
   height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 3px;
   border-radius: 14px;
-  background: #f3eadc;
-  color: #7b4a24;
+  background: #f2f5f7;
+  color: #000000;
   font-weight: 900;
+  transition:
+    background 0.22s ease,
+    color 0.22s ease,
+    transform 0.22s ease;
+}
+
+.cart-rank-arrow {
+  display: inline-block;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 0.8;
+  opacity: 1;
+  transform: scaleX(1.22);
+  text-shadow: 0.55px 0 currentColor, -0.55px 0 currentColor;
+}
+
+.cart-rank-arrow--up {
+  color: #18803a;
+  animation: rank-arrow-up 0.55s ease-in-out infinite alternate;
+}
+
+.cart-rank-arrow--down {
+  color: #c62929;
+  animation: rank-arrow-down 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes rank-arrow-up {
+  from {
+    transform: translateY(2px) scaleX(1.22);
+  }
+  to {
+    transform: translateY(-2px) scaleX(1.22);
+  }
+}
+
+@keyframes rank-arrow-down {
+  from {
+    transform: translateY(-2px) scaleX(1.22);
+  }
+  to {
+    transform: translateY(2px) scaleX(1.22);
+  }
 }
 
 .cart-item-info {
@@ -1030,9 +1306,14 @@ input {
 
 .purchase-button.disabled {
   background: rgba(255, 255, 255, 0.16);
-  color: #d8c8b4;
+  color: #7b4a24;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.button-progress-count {
+  display: block;
+  margin-top: 4px;
 }
 
 .meat-seal-display {
@@ -1326,18 +1607,26 @@ input {
 }
 
 .session-two-heading h2 {
-  margin: 0;
-  font-size: 40px;
   color: #2a1d14;
+  margin: 5px;
+  font-size: 40px;
 }
 
 .session-two-heading p {
   width: 823.76px;
   height: 63px;
-  margin: 8px 0 0 0;
+  margin: 5px;
   color: #6b5b4c;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.4;
+}
+
+.study-page .session-two-heading .session-two-step-label {
+  width: auto;
+  height: auto;
+  margin: 0 0 6px;
+  color: #2a1d14;
+  font-weight: 800;
 }
 
 .read-counter {
@@ -1401,30 +1690,6 @@ input {
   margin: 8px 0 0;
   color: #6b5b4c;
   font-weight: 700;
-}
-
-.read-check {
-  color: #1a7a3a;
-  background: none;
-  border: 2px solid #1a7a3a;
-  border-radius: 999px;
-  justify-content: center;
-  align-items: center;
-  width: 40px;
-  height: 40px;
-  font-size: 22px;
-  font-weight: 900;
-  transition: background .2s, color .2s, border-color .2s;
-  display: flex;
-  position: absolute;
-  top: 27px;
-  right: 26px;
-}
-
-.read-check--empty {
-  background: transparent;
-  border: 2px solid #c8bfb5;
-  color: #c8bfb5;
 }
 
 .seal-modal-card {
@@ -1627,4 +1892,102 @@ input {
   font-weight: 800;
   font-size: 14px;
   box-shadow: 0 8px 24px rgba(91, 66, 20, 0.18);
+}
+
+.help-widget {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+}
+
+.help-button {
+  position: relative;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: #2a1d14;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 12px 30px rgba(42, 29, 20, 0.24);
+}
+
+.help-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #bb0b0b;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.help-panel {
+  position: absolute;
+  right: 0;
+  bottom: 54px;
+  width: min(300px, calc(100vw - 36px));
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid #d8c8b4;
+  color: #2a1d14;
+  box-shadow: 0 18px 45px rgba(42, 29, 20, 0.2);
+}
+
+.help-panel strong {
+  font-size: 17px;
+}
+
+.help-panel p,
+.help-panel small {
+  margin: 0;
+  color: #6b5b4c;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.help-stats {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f7f3ec;
+  color: #2a1d14;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.help-panel button {
+  width: 100%;
+  border: 1px solid #d8c8b4;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #2a1d14;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.help-panel button:first-of-type {
+  background: #2f4f2f;
+  border-color: #2f4f2f;
+  color: #ffffff;
+}
+
+.help-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
