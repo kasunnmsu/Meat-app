@@ -15,6 +15,7 @@ import {
   RESULT_LOCATIONS,
   type ResultCategory,
 } from "@/lib/dataPaths";
+import { getLatestRankingRows } from "@/lib/studyDatabase";
 
 export const runtime = "nodejs";
 
@@ -101,21 +102,29 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const [sessionOneResults, sessionTwoResults] =
-    await Promise.all([
-      readResultsFile(
-        "session-1",
-        "session-1-results.json",
-        participantId,
-        location
-      ),
-      readResultsFile(
-        "session-2",
-        "session-2-results.json",
-        participantId,
-        location
-      ),
-    ]);
+  const [databaseSessionOneRows, databaseSessionTwoRows] = await Promise.all([
+    getLatestRankingRows(participantId, 1, location),
+    getLatestRankingRows(participantId, 2, location),
+  ]);
+
+  const [sessionOneResults, sessionTwoResults] = await Promise.all([
+    databaseSessionOneRows.length > 0
+      ? Promise.resolve({ longRows: databaseSessionOneRows as SealRankingRow[] })
+      : readResultsFile(
+          "session-1",
+          "session-1-results.json",
+          participantId,
+          location
+        ),
+    databaseSessionTwoRows.length > 0
+      ? Promise.resolve({ longRows: databaseSessionTwoRows as SealRankingRow[] })
+      : readResultsFile(
+          "session-2",
+          "session-2-results.json",
+          participantId,
+          location
+        ),
+  ]);
 
   const { topSealIds, weightedScores } = calculateTopSeals(
     sessionOneResults.longRows ?? [],

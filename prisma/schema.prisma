@@ -1,105 +1,78 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
+enum StudyLocation {
+  PUCPR
+  UFBA
+  NMSU
+}
+
+enum SubmissionKind {
+  SESSION_1
+  SESSION_2
+  SESSION_3
+  FULL_SURVEY
+  CLICK_LOGS
+}
+
+// A participant is unique inside a study location. The same human-readable
+// identifier may therefore be used independently at PUCPR, UFBA and NMSU.
 model Participant {
-  id             String   @id
-  location       String
-  deviceType     String?
-  gender         String?
-  ageGroup       String?
-  educationLevel String?
-  incomeGroup    String?
-  createdAt      DateTime @default(now())
+  id           String
+  location     StudyLocation
+  demographics Json?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  sessions     Session[]
-  choices      Choice[]
-  sealReadings SealReading[]
-  revisions    Revision[]
+  submissions StudySubmission[]
+
+  @@id([id, location])
+  @@index([location])
 }
 
-model Session {
-  id                String    @id @default(uuid())
-  participantId     String
-  sessionNumber     Int
-  randomizationSeed String
-  startedAt         DateTime  @default(now())
-  completedAt       DateTime?
-
-  participant Participant @relation(fields: [participantId], references: [id])
-  choices     Choice[]
-}
-
-model Choice {
-  id                   String   @id @default(uuid())
-  participantId        String
-  sessionId            String?
-  sessionNumber        Int
-
-  optionId             String
-  cutId                String?
-  sealId               String?
-  price                Float?
-
-  displayedPosition    Int
-  selectedRank         Int?
-  confirmed            Boolean  @default(false)
-  selectionTimeSeconds Int?
-  createdAt            DateTime @default(now())
-
-  participant Participant @relation(fields: [participantId], references: [id])
-  session     Session?    @relation(fields: [sessionId], references: [id])
-}
-
-model SealReading {
-  id                 String   @id @default(uuid())
-  participantId      String
-  sealId             String
-  openedDescription  Boolean  @default(false)
-  readingTimeSeconds Int?
-  agreedDescription  Boolean?
-  createdAt          DateTime @default(now())
-
-  participant Participant @relation(fields: [participantId], references: [id])
-}
-
-model Revision {
-  id            String   @id @default(uuid())
+// Stores the complete request exactly as it was received. Keeping the full
+// JSON payload prevents a newly collected field from being silently lost.
+model StudySubmission {
+  id            String         @id @default(uuid())
+  submissionId  String
   participantId String
-  sessionNumber Int
-  action        String
-  optionId      String?
-  createdAt     DateTime @default(now())
+  location      StudyLocation
+  kind          SubmissionKind
+  sessionNumber Int?
+  payload       Json
+  createdAt     DateTime       @default(now())
 
-  participant Participant @relation(fields: [participantId], references: [id])
+  participant Participant    @relation(fields: [participantId, location], references: [id, location], onDelete: Restrict)
+  rows        StudyDataRow[]
+
+  @@unique([submissionId, location, kind, participantId])
+  @@index([location, kind, createdAt])
+  @@index([participantId, location, sessionNumber])
 }
 
-model ProductOption {
-  id       String  @id
-  cutId    String
-  sealId   String
-  imageUrl String?
-  location String?
-  active   Boolean @default(true)
-}
+// Each array in a request is also stored row by row. This makes exports and
+// filters practical while the complete submission above remains the backup.
+model StudyDataRow {
+  id             BigInt         @id @default(autoincrement())
+  submissionDbId String
+  participantId  String
+  location       StudyLocation
+  kind           SubmissionKind
+  sessionNumber  Int?
+  dataset        String
+  rowIndex       Int
+  data           Json
+  savedAt        DateTime       @default(now())
 
-model Seal {
-  id          String  @id
-  name        String
-  color       String
-  description String
-  active      Boolean @default(true)
-}
+  submission StudySubmission @relation(fields: [submissionDbId], references: [id], onDelete: Cascade)
 
-model Cut {
-  id       String  @id
-  name     String
-  format   String
-  imageUrl String?
-  active   Boolean @default(true)
+  @@unique([submissionDbId, dataset, rowIndex])
+  @@index([location, dataset])
+  @@index([participantId, location, sessionNumber])
 }

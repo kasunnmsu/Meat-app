@@ -19,6 +19,7 @@ import {
   writeCodebookWorkbook,
   writeSessionAnalysisWorkbook,
 } from "@/lib/resultWorkbooks";
+import { saveStudySubmission, SubmissionKind } from "@/lib/studyDatabase";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,28 @@ export async function POST(request: Request) {
     }
 
     const location = String(participantRow.location);
+
+    const databaseResult = await saveStudySubmission({
+      submissionId,
+      participantId: String(participantRow.participant_id),
+      location,
+      kind: SubmissionKind.SESSION_1,
+      sessionNumber: 1,
+      payload: body as Record<string, unknown>,
+    });
+
+    if (databaseResult.enabled) {
+      return NextResponse.json({
+        success: true,
+        message: "Session 1 participant saved to PostgreSQL.",
+        storage: "postgresql",
+        duplicate: databaseResult.duplicate,
+        participantRows: databaseResult.duplicate ? 0 : 1,
+        longRows: databaseResult.duplicate ? 0 : longRows.length,
+        databaseRows: databaseResult.savedRows,
+      });
+    }
+
     const dataDir = getResultsAreaDirectory(
       location,
       "session-1",

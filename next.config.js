@@ -1,10 +1,13 @@
-const path = require("path");
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   turbopack: {
-    root: path.resolve(__dirname),
+    root: path.resolve(currentDirectory),
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

@@ -545,3 +545,30 @@ For cloud deployment, use a database or persistent file storage because many ser
 3. Open laptop Network URL on tablet.
 4. Use Start New Survey for each participant.
 5. Back up the data folder regularly.
+
+---
+
+## 15. Azure PostgreSQL Setup
+
+The cloud database uses one PostgreSQL database with a mandatory `location`
+value on every participant, submission, and data row. The supported values are
+`PUCPR`, `UFBA`, and `NMSU`, so each location can be filtered and exported
+independently without maintaining three separate databases.
+
+1. Create an Azure Database for PostgreSQL Flexible Server and an empty database.
+2. Copy `.env.example` to `.env` for local development.
+3. Replace the example with the PostgreSQL connection string supplied by Azure.
+4. In Azure App Service, add the same connection string as an application setting
+   named `DATABASE_URL`. Keep `sslmode=require` in the URL.
+5. Create the database tables once with `npm run prisma:migrate:deploy`.
+6. Build and start the application normally.
+
+After deployment, open `/api/database/health`. A successful configuration returns
+`{"connected":true}` without exposing the connection string or password.
+
+When `DATABASE_URL` is configured, each validated API request is written to
+PostgreSQL instead of relying on the application server's filesystem. The entire
+JSON request is preserved in `StudySubmission`, and every array of choices,
+readings, clicks, timings, confirmations, and revisions is also stored row by row
+in `StudyDataRow`. If `DATABASE_URL` is absent, the existing local JSON, CSV,
+SQLite, and Excel export mode remains available for local collection.

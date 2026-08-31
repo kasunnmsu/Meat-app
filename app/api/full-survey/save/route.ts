@@ -21,6 +21,11 @@ import {
 import { writeFullSurveyAnalysisWorkbook } from "@/lib/resultWorkbooks";
 import { createFullSurveyTimingFields } from "@/lib/fullSurveyTiming";
 import { DATA_SCHEMA_VERSION } from "@/lib/sessionPayloads";
+import {
+  getLatestSessionPayload,
+  saveStudySubmission,
+  SubmissionKind,
+} from "@/lib/studyDatabase";
 
 export const runtime = "nodejs";
 
@@ -36,6 +41,21 @@ type SessionStore = {
   longRows?: AnyRow[];
   sealReadingRows?: AnyRow[];
 };
+
+function asAnyRow(value: unknown): AnyRow | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as AnyRow)
+    : undefined;
+}
+
+function asAnyRows(value: unknown): AnyRow[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (row): row is AnyRow =>
+          Boolean(row) && typeof row === "object" && !Array.isArray(row)
+      )
+    : [];
+}
 
 function readJsonStore(filePath: string): SessionStore {
   if (!fs.existsSync(filePath)) {
@@ -247,54 +267,75 @@ export async function POST(request: Request) {
     const jsonPath = path.join(dataDir, "full-survey-results.json");
     const excelPath = path.join(dataDir, "full-survey-results.xlsx");
 
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    if (!fs.existsSync(analysisDir)) {
-      fs.mkdirSync(analysisDir, { recursive: true });
-    }
+    const [session1Payload, session2Payload, session3Payload] =
+      await Promise.all([
+        getLatestSessionPayload(participantId, location, 1),
+        getLatestSessionPayload(participantId, location, 2),
+        getLatestSessionPayload(participantId, location, 3),
+      ]);
 
-    const session1Row = findParticipantRow(
-      location,
-      "session-1",
-      "session-1-results.json",
-      participantId
-    );
+    const session1Row =
+      asAnyRow(session1Payload?.participantRow) ??
+      findParticipantRow(
+        location,
+        "session-1",
+        "session-1-results.json",
+        participantId
+      );
 
-    const session2Row = findParticipantRow(
-      location,
-      "session-2",
-      "session-2-results.json",
-      participantId
-    );
+    const session2Row =
+      asAnyRow(session2Payload?.participantRow) ??
+      findParticipantRow(
+        location,
+        "session-2",
+        "session-2-results.json",
+        participantId
+      );
 
-    const session3Row = findParticipantRow(
-      location,
-      "session-3",
-      "session-3-results.json",
-      participantId
-    );
+    const session3Row =
+      asAnyRow(session3Payload?.participantRow) ??
+      findParticipantRow(
+        location,
+        "session-3",
+        "session-3-results.json",
+        participantId
+      );
 
-    const session1LongRows = findParticipantLongRows(
-      location,
-      "session-1",
-      "session-1-results.json",
-      participantId
-    );
-    const session2LongRows = findParticipantLongRows(
-      location,
-      "session-2",
-      "session-2-results.json",
-      participantId
-    );
-    const session3LongRows = findParticipantLongRows(
-      location,
-      "session-3",
-      "session-3-results.json",
-      participantId
-    );
+    const session1LongRows =
+      asAnyRows(session1Payload?.longRows).length > 0
+        ? asAnyRows(session1Payload?.longRows)
+        : findParticipantLongRows(
+            location,
+            "session-1",
+            "session-1-results.json",
+            participantId
+          );
+    const session2LongRows =
+      asAnyRows(session2Payload?.longRows).length > 0
+        ? asAnyRows(session2Payload?.longRows)
+        : findParticipantLongRows(
+            location,
+            "session-2",
+            "session-2-results.json",
+            participantId
+          );
+    const session3LongRows =
+      asAnyRows(session3Payload?.longRows).length > 0
+        ? asAnyRows(session3Payload?.longRows)
+        : findParticipantLongRows(
+            location,
+            "session-3",
+            "session-3-results.json",
+            participantId
+          );
 
-    const sealReadingRows = findSealReadingRows(location, participantId);
+    const databaseSealReadingRows = asAnyRows(
+      session2Payload?.sealReadingRows
+    );
+    const sealReadingRows =
+      databaseSealReadingRows.length > 0
+        ? databaseSealReadingRows
+        : findSealReadingRows(location, participantId);
 
     const fullSurveySavedAt = new Date().toISOString();
     const fullSurveyTiming = createFullSurveyTimingFields(
@@ -331,6 +372,39 @@ export async function POST(request: Request) {
       ...fullSurveyTiming,
       full_survey_saved_at: fullSurveySavedAt,
     };
+
+    const databaseResult = await saveStudySubmission({
+      submissionId,
+      participantId,
+      location,
+      kind: SubmissionKind.FULL_SURVEY,
+      payload: {
+        ...(body as Record<string, unknown>),
+        combinedRow,
+      },
+      demographics: demographics as Record<string, unknown>,
+      additionalDatasets: {
+        participantRows: [combinedRow],
+      },
+    });
+
+    if (databaseResult.enabled) {
+      return NextResponse.json({
+        success: true,
+        message: "Full survey saved to PostgreSQL.",
+        storage: "postgresql",
+        duplicate: databaseResult.duplicate,
+        participantRows: databaseResult.duplicate ? 0 : 1,
+        databaseRows: databaseResult.savedRows,
+      });
+    }
+
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    if (!fs.existsSync(analysisDir)) {
+      fs.mkdirSync(analysisDir, { recursive: true });
+    }
 
     const result = await withFileLock(jsonPath, async () => {
       let store: ResultsStore = {

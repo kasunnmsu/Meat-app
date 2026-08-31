@@ -1,8 +1,11 @@
 node_modules
 .next
 .env
+.env.*
+!.env.example
 .claude
 .eslintcache
+/generated/prisma
 
 # Local study output data
 data/*.json

@@ -15,6 +15,7 @@ import {
   getRelativeResultsDirectory,
   getResultsDirectory,
 } from "@/lib/dataPaths";
+import { saveStudySubmission, SubmissionKind } from "@/lib/studyDatabase";
 
 export const runtime = "nodejs";
 
@@ -160,6 +161,50 @@ export async function POST(request: NextRequest) {
         ...(rowsByLocation.get(location) ?? []),
         row,
       ]);
+    }
+
+    const databaseResults = await Promise.all(
+      Array.from(rowsByLocation.entries()).flatMap(([location, rows]) => {
+        const rowsByParticipant = new Map<string, ClickLogRow[]>();
+
+        for (const row of rows) {
+          const participantId = String(row.participant_id);
+          rowsByParticipant.set(participantId, [
+            ...(rowsByParticipant.get(participantId) ?? []),
+            row,
+          ]);
+        }
+
+        return Array.from(rowsByParticipant.entries()).map(
+          ([participantId, participantRows]) =>
+            saveStudySubmission({
+              submissionId,
+              participantId,
+              location,
+              kind: SubmissionKind.CLICK_LOGS,
+              payload: {
+                submissionId,
+                clickRows: participantRows,
+              },
+            })
+        );
+      })
+    );
+
+    if (
+      databaseResults.length > 0 &&
+      databaseResults.every((result) => result.enabled)
+    ) {
+      return NextResponse.json({
+        success: true,
+        storage: "postgresql",
+        duplicate: databaseResults.every((result) => result.duplicate),
+        savedRows: databaseResults.reduce(
+          (total, result) => total + result.savedRows,
+          0
+        ),
+        totalRows: incomingRows.length,
+      });
     }
 
     const results = await Promise.all(
