@@ -40,6 +40,14 @@ html[data-layout-profile="automatic"] .study-shell {
   min-height: calc(var(--automatic-viewport-height, 100svh) - 28px);
 }
 
+/* Keep PUCPR vertically aligned like UFBA on devices using automatic layout. */
+html[data-layout-profile="automatic"] .location-pucpr .study-shell {
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 html[data-layout-profile="automatic"] .ranking-area,
 html[data-layout-profile="automatic"] .complete-card,
 html[data-layout-profile="automatic"] .session-two-card {
