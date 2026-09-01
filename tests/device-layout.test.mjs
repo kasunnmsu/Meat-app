@@ -35,7 +35,7 @@ test("Device settings require the configured moderator PIN", () => {
   assert.equal(isDeviceSettingsPinValid(""), false);
 });
 
-test("Automatic layout centers PUCPR without changing the current profile", () => {
+test("Automatic layout safely centers PUCPR without trapping tall content", () => {
   const css = fs.readFileSync(
     new URL("../app/automatic-layout.css", import.meta.url),
     "utf8"
@@ -48,5 +48,36 @@ test("Automatic layout centers PUCPR without changing the current profile", () =
   assert.match(automaticPucprRule[1], /margin-top:\s*0;/);
   assert.match(automaticPucprRule[1], /display:\s*flex;/);
   assert.match(automaticPucprRule[1], /flex-direction:\s*column;/);
-  assert.match(automaticPucprRule[1], /justify-content:\s*center;/);
+  assert.match(automaticPucprRule[1], /justify-content:\s*flex-start;/);
+  assert.match(
+    css,
+    /\.location-pucpr \.study-shell > \*\s*\{[^}]*margin-block:\s*auto;/s
+  );
+});
+
+test("Automatic layout keeps vertical touch scrolling enabled", () => {
+  const css = fs.readFileSync(
+    new URL("../app/automatic-layout.css", import.meta.url),
+    "utf8"
+  );
+  const automaticDocumentRule = css.match(
+    /html\[data-layout-profile="automatic"\],\s*html\[data-layout-profile="automatic"\] body\s*\{([^}]*)\}/
+  );
+
+  assert.ok(automaticDocumentRule);
+  assert.match(automaticDocumentRule[1], /overflow-x:\s*hidden;/);
+  assert.match(automaticDocumentRule[1], /overflow-y:\s*auto;/);
+  assert.match(automaticDocumentRule[1], /touch-action:\s*pan-y pinch-zoom;/);
+  assert.match(
+    automaticDocumentRule[1],
+    /-webkit-overflow-scrolling:\s*touch;/
+  );
+  assert.match(
+    css,
+    /@supports \(overflow:\s*clip\)[\s\S]*overflow-x:\s*clip;[\s\S]*overflow-y:\s*visible;/
+  );
+  assert.match(
+    css,
+    /\.study-page\s*\{[^}]*overflow-y:\s*visible;[^}]*touch-action:\s*pan-y pinch-zoom;/s
+  );
 });

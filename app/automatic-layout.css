@@ -4,6 +4,19 @@ html[data-layout-profile="automatic"],
 html[data-layout-profile="automatic"] body {
   min-width: 0;
   overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Avoid nested scroll containers on browsers that support non-scrolling clip. */
+@supports (overflow: clip) {
+  html[data-layout-profile="automatic"],
+  html[data-layout-profile="automatic"] body {
+    height: auto;
+    overflow-x: clip;
+    overflow-y: visible;
+  }
 }
 
 html[data-layout-profile="automatic"] :where(
@@ -28,7 +41,10 @@ html[data-layout-profile="automatic"] .location-ufba {
 }
 
 html[data-layout-profile="automatic"] .study-page {
+  height: auto;
   min-height: var(--automatic-viewport-height, 100svh);
+  overflow-y: visible;
+  touch-action: pan-y pinch-zoom;
   padding:
     max(14px, env(safe-area-inset-top))
     max(14px, env(safe-area-inset-right))
@@ -37,15 +53,22 @@ html[data-layout-profile="automatic"] .study-page {
 }
 
 html[data-layout-profile="automatic"] .study-shell {
+  height: auto;
   min-height: calc(var(--automatic-viewport-height, 100svh) - 28px);
+  overflow-y: visible;
 }
 
-/* Keep PUCPR vertically aligned like UFBA on devices using automatic layout. */
+/* Center short PUCPR screens without trapping content taller than the viewport. */
 html[data-layout-profile="automatic"] .location-pucpr .study-shell {
   margin-top: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+}
+
+html[data-layout-profile="automatic"] .location-pucpr .study-shell > * {
+  width: 100%;
+  margin-block: auto;
 }
 
 html[data-layout-profile="automatic"] .ranking-area,
