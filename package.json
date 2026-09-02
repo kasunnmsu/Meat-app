@@ -12,6 +12,11 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "results:export": "node scripts/export-study-results.mjs",
+    "results:organize": "node scripts/organize-query-export.mjs",
+    "results:organize:nmsu": "node scripts/organize-latest-folder-export.mjs --folder C:\\Users\\drumo\\Desktop\\Dados\\NMSU",
+    "results:organize:pucpr": "node scripts/organize-latest-folder-export.mjs --folder C:\\Users\\drumo\\Desktop\\Dados\\PUCPR",
+    "results:organize:ufba": "node scripts/organize-latest-folder-export.mjs --folder C:\\Users\\drumo\\Desktop\\Dados\\UFBA",
     "postinstall": "prisma generate"
   },
   "dependencies": {

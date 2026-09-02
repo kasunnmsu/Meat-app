@@ -10,3 +10,10 @@ node_modules
 # Local study output data
 data/*.json
 data/*.xlsx
+exports/
+*.xlsx
+*.xls
+*.csv
+*.tsv
+result_export*.json
+~$*.xlsx
