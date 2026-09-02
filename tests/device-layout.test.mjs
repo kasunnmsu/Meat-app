@@ -81,3 +81,28 @@ test("Automatic layout keeps vertical touch scrolling enabled", () => {
     /\.study-page\s*\{[^}]*overflow-y:\s*visible;[^}]*touch-action:\s*pan-y pinch-zoom;/s
   );
 });
+
+test("Automatic tablet layout gives PUCPR the same seal sizing as UFBA", () => {
+  const css = fs.readFileSync(
+    new URL("../app/automatic-layout.css", import.meta.url),
+    "utf8"
+  );
+  const productSealRule = css.match(
+    /:is\(\s*\.product-card--pucpr,\s*\.product-card--ufba\s*\) \.seal-overlay-image\s*\{([^}]*)\}/s
+  );
+  const readingSealRule = css.match(
+    /:is\(\s*\.location-pucpr,\s*\.location-ufba\s*\) \.seal-image-holder img\s*\{([^}]*)\}/s
+  );
+
+  assert.ok(productSealRule);
+  assert.match(productSealRule[1], /width:\s*82px;/);
+  assert.match(productSealRule[1], /height:\s*90px;/);
+  assert.match(productSealRule[1], /top:\s*-2px;/);
+  assert.match(productSealRule[1], /right:\s*2px;/);
+
+  assert.ok(readingSealRule);
+  assert.match(readingSealRule[1], /width:\s*auto;/);
+  assert.match(readingSealRule[1], /height:\s*auto;/);
+  assert.match(readingSealRule[1], /max-width:\s*100px;/);
+  assert.match(readingSealRule[1], /max-height:\s*100px;/);
+});

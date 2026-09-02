@@ -371,6 +371,29 @@ html[data-layout-profile="automatic"] .final-seal-img {
   }
 }
 
+/* Keep PUCPR seals aligned with the tablet sizing already used by UFBA. */
+@media (min-width: 800px) and (max-width: 840px) and (min-height: 1060px) and (max-height: 1120px) and (orientation: portrait) {
+  html[data-layout-profile="automatic"] :is(
+    .product-card--pucpr,
+    .product-card--ufba
+  ) .seal-overlay-image {
+    width: 82px;
+    height: 90px;
+    top: -2px;
+    right: 2px;
+  }
+
+  html[data-layout-profile="automatic"] :is(
+    .location-pucpr,
+    .location-ufba
+  ) .seal-image-holder img {
+    width: auto;
+    height: auto;
+    max-width: 100px;
+    max-height: 100px;
+  }
+}
+
 @media (max-height: 540px) and (orientation: landscape) {
   html[data-layout-profile="automatic"] .study-page {
     padding-block: 10px;
