@@ -111,7 +111,7 @@ const dictionary = {
 
     "s3.introBadge": "Etapa 3",
     "s3.introTitle": "Informações adicionais!",
-    "s3.introDesc": "A seguir, você passará por três rodadas seguidas. Em cada uma, verá produtos selecionados com base em suas escolhas anteriores.",
+    "s3.introDesc": "A seguir, você passará por três rodadas de escolha. Em cada uma, verá produtos selecionados com base em suas escolhas anteriores.",
     "s3.rankingTitle": "Etapa 3",
     "s3.rankingDesc": "Abaixo estão três opções de picanha, com seus selos de certificação e preços. Selecione as três, uma a uma, de acordo com sua ordem de preferência. Se quiser, clique em qualquer selo para ver a descrição novamente.",
     "s3.rankingDescLater": "Abaixo estão três opções de picanha, com seus selos de certificação e preços. Selecione as três, uma a uma, de acordo com sua ordem de preferência. Se quiser, clique em qualquer selo para ver a descrição novamente.",

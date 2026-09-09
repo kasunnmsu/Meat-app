@@ -17,6 +17,12 @@ import { isCompleteRanking } from "@/lib/payloadValidation";
 import { getSealNameKey } from "@/lib/seals";
 import { loadSurveyDraft, saveSurveyDraft } from "@/lib/surveyDraft";
 import {
+  hasMatchingTcleConsent,
+  locationRequiresTcle,
+  parseTcleConsent,
+  TCLE_CONSENT_STORAGE_KEY,
+} from "@/lib/tcleConsent";
+import {
   createSessionClickRows,
   createSessionOnePayload,
 } from "@/lib/sessionPayloads";
@@ -299,6 +305,23 @@ export default function SessionOnePage() {
           }
         : undefined,
     });
+    const tcleConsent = parseTcleConsent(
+      localStorage.getItem(TCLE_CONSENT_STORAGE_KEY)
+    );
+    const tcleAccepted = hasMatchingTcleConsent(
+      tcleConsent,
+      participantId,
+      participantLocation
+    );
+
+    participantRow.tcle_accepted = locationRequiresTcle(participantLocation)
+      ? tcleAccepted
+        ? "Yes"
+        : "No"
+      : "Not required";
+    participantRow.tcle_accepted_at = tcleAccepted
+      ? tcleConsent?.acceptedAt ?? ""
+      : "";
     const clickRows = createSessionClickRows(
       rankingClickLogs,
       participantId,

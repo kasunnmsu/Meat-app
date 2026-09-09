@@ -71,6 +71,10 @@ html[data-layout-profile="automatic"] .location-pucpr .study-shell > * {
   margin-block: auto;
 }
 
+html[data-layout-profile="automatic"] .location-pucpr .tcle-shell > * {
+  margin-block: 0;
+}
+
 html[data-layout-profile="automatic"] .ranking-area,
 html[data-layout-profile="automatic"] .complete-card,
 html[data-layout-profile="automatic"] .session-two-card {

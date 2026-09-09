@@ -24,6 +24,10 @@ import {
   normalizeDeviceLayoutProfile,
   type DeviceLayoutProfile,
 } from "@/lib/deviceLayout";
+import {
+  locationRequiresTcle,
+  TCLE_CONSENT_STORAGE_KEY,
+} from "@/lib/tcleConsent";
 
 function createParticipantId(location: string) {
   const prefix = location.replace(/\s+/g, "").toUpperCase();
@@ -39,6 +43,7 @@ function clearPreviousParticipantData() {
   localStorage.removeItem("surveyMode");
   localStorage.removeItem("surveyStartedAt");
   localStorage.removeItem("selectedSessionPath");
+  localStorage.removeItem(TCLE_CONSENT_STORAGE_KEY);
 
   localStorage.removeItem("session-1-ranking");
   localStorage.removeItem("session-1-demographics");
@@ -174,6 +179,7 @@ export default function HomePage() {
     const id = createParticipantId(location);
     setParticipantId(id);
     saveParticipant(id);
+    router.push(locationRequiresTcle(location) ? "/tcle" : "/session-1");
   }
 
   function handleEnter() {
@@ -186,7 +192,7 @@ export default function HomePage() {
       saveParticipant(id);
     }
 
-    router.push("/session-1");
+    router.push(locationRequiresTcle(location) ? "/tcle" : "/session-1");
   }
 
   async function handleSyncPending() {

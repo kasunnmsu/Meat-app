@@ -1991,3 +1991,93 @@ html body .study-page :is(
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.tcle-page {
+  display: flex;
+  align-items: flex-start;
+  padding-top: 32px;
+}
+
+.tcle-shell {
+  max-width: 900px;
+}
+
+.tcle-card {
+  padding: 38px 44px;
+}
+
+.tcle-header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #eadfce;
+}
+
+.tcle-header h1 {
+  margin: 0;
+  color: #2a1d14;
+  font-size: clamp(27px, 4vw, 38px);
+  line-height: 1.15;
+}
+
+.tcle-content {
+  padding: 12px 2px 4px;
+  color: #4d4034;
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+.tcle-card .tcle-content p {
+  margin: 14px 0;
+  color: inherit;
+}
+
+.tcle-content ul {
+  margin: 4px 0 18px;
+  padding-left: 26px;
+}
+
+.tcle-content li + li {
+  margin-top: 5px;
+}
+
+.tcle-agreement {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #d8c8b4;
+  border-radius: 16px;
+  background: #f7f7f2;
+  color: #2a1d14;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tcle-agreement input {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  accent-color: #2f4f2f;
+}
+
+.tcle-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.tcle-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.tcle-loading-page {
+  display: grid;
+  place-items: center;
+  color: #6b5b4c;
+  font-weight: 800;
+}

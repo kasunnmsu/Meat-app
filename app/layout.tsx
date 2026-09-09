@@ -6,6 +6,7 @@ import PendingBanner from "@/components/PendingBanner";
 import ViewportDebugPanel from "@/components/ViewportDebugPanel";
 import DeviceLayoutController from "@/components/DeviceLayoutController";
 import PullToRefreshGuard from "@/components/PullToRefreshGuard";
+import TcleConsentGuard from "@/components/TcleConsentGuard";
 import { LanguageProvider } from "@/lib/i18n";
 import Providers from "./providers";
 
@@ -27,7 +28,9 @@ export default function RootLayout({
         <LanguageProvider>
           <PendingBanner />
           <ViewportDebugPanel />
-          <Providers>{children}</Providers>
+          <Providers>
+            <TcleConsentGuard>{children}</TcleConsentGuard>
+          </Providers>
         </LanguageProvider>
       </body>
     </html>

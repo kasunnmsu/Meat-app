@@ -1016,3 +1016,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 680px) {
+  .tcle-page {
+    padding: 16px;
+  }
+
+  .tcle-card {
+    padding: 24px 20px;
+    border-radius: 20px;
+  }
+
+  .tcle-content {
+    font-size: 15px;
+  }
+
+  .tcle-actions {
+    grid-template-columns: 1fr;
+  }
+}
