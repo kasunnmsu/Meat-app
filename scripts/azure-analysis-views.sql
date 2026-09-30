@@ -1,7 +1,3 @@
--- Uma unica tabela analitica para o app.
--- Resultado: uma linha por participante e uma coluna por campo do questionario.
--- As respostas originais nao sao alteradas nem apagadas.
-
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.atualizar_resultados_app()
@@ -116,3 +112,6 @@ SELECT
     WHERE table_schema = 'public'
       AND table_name = 'resultados_app'
   ) AS colunas;
+SELECT *
+FROM public.resultados_app
+WHERE local_estudo = 'PUCPR';

@@ -96,6 +96,15 @@ export default function TclePage() {
             </p>
 
             <p>
+              <strong>Requisitos para participação:</strong>
+            </p>
+
+            <ul>
+              <li>Ser consumidor de carne bovina;</li>
+              <li>Realizar compras online.</li>
+            </ul>
+
+            <p>
               Durante aproximadamente <strong>10 minutos</strong>, você irá:
             </p>
 
