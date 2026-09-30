@@ -91,8 +91,8 @@ export default function TclePage() {
           <div className="tcle-content">
             <p>
               Você está sendo convidado(a) a participar voluntariamente de uma
-              pesquisa sobre <strong>preferências de consumidores na compra de
-              carne bovina em ambiente digital</strong>.
+              pesquisa sobre <strong>Percepções dos Consumidores sobre Rótulos
+              de Certificação de Carne Bovina em um Ambiente de Compras Online</strong>.
             </p>
 
             <p>
