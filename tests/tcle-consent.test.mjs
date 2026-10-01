@@ -6,10 +6,10 @@ import {
   parseTcleConsent,
 } from "../lib/tcleConsent.ts";
 
-test("TCLE is required only for PUCPR and UFBA", () => {
+test("TCLE is required for every study location", () => {
   assert.equal(locationRequiresTcle("PUCPR"), true);
   assert.equal(locationRequiresTcle("UFBA"), true);
-  assert.equal(locationRequiresTcle("NMSU"), false);
+  assert.equal(locationRequiresTcle("NMSU"), true);
 });
 
 test("TCLE consent belongs to one participant and location", () => {

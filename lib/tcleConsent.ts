@@ -7,7 +7,7 @@ export type TcleConsent = {
 };
 
 export function locationRequiresTcle(location: string) {
-  return location === "PUCPR" || location === "UFBA";
+  return location === "PUCPR" || location === "UFBA" || location === "NMSU";
 }
 
 export function parseTcleConsent(rawConsent: string | null): TcleConsent | null {

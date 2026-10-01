@@ -23,7 +23,7 @@ export default function TclePage() {
     const storedLocation = localStorage.getItem("participantLocation") || "";
 
     if (!storedParticipantId || !locationRequiresTcle(storedLocation)) {
-      router.replace(storedLocation === "NMSU" ? "/session-1" : "/");
+      router.replace("/");
       return;
     }
 
@@ -78,6 +78,8 @@ export default function TclePage() {
     );
   }
 
+  const isNmsu = participantLocation === "NMSU";
+
   return (
     <main
       className={`study-page tcle-page location-${participantLocation.toLowerCase()}`}
@@ -85,10 +87,72 @@ export default function TclePage() {
       <section className="study-shell tcle-shell">
         <article className="complete-card tcle-card">
           <header className="tcle-header">
-            <h1>Termo de Consentimento Livre e Esclarecido (TCLE)</h1>
+            <h1>
+              {isNmsu
+                ? "Informed Consent Form (ICF)"
+                : "Termo de Consentimento Livre e Esclarecido (TCLE)"}
+            </h1>
           </header>
 
           <div className="tcle-content">
+            {isNmsu && (
+              <>
+                <p>
+                  You are being invited to voluntarily participate in a research
+                  study on <strong>Consumer Perceptions of Beef Certification
+                  Labels in an Online Retail Environment</strong>.
+                </p>
+
+                <p><strong>Requirements for participation:</strong></p>
+
+                <ul>
+                  <li>Be a beef consumer;</li>
+                  <li>Shop online.</li>
+                </ul>
+
+                <p><strong>During approximately 10 minutes, you will:</strong></p>
+
+                <ul>
+                  <li>Select beef products in an online retail application;</li>
+                  <li>Receive information about product labels and certifications;</li>
+                  <li>Re-evaluate products with different prices;</li>
+                  <li>Complete a brief sociodemographic questionnaire.</li>
+                </ul>
+
+                <p>
+                  Your participation is <strong>voluntary</strong>. You may
+                  withdraw at any time without providing a reason and without any
+                  penalty or negative consequences.
+                </p>
+
+                <p>
+                  You will <strong>not be asked to provide your name or email
+                  address</strong>, and your information will be kept
+                  <strong> confidential and used exclusively for scientific
+                  purposes</strong>.
+                </p>
+
+                <p>
+                  No risks to your health are expected. Some questions may cause
+                  minor discomfort or embarrassment, and you may choose not to
+                  continue at any time.
+                </p>
+
+                <p>
+                  Participation <strong>does not involve any payment,
+                  compensation, or costs to you</strong>.
+                </p>
+
+                <p>
+                  By proceeding, you acknowledge that you have received
+                  information about the study and voluntarily agree to
+                  participate.
+                </p>
+              </>
+            )}
+
+            {!isNmsu && (
+              <>
             <p>
               Você está sendo convidado(a) a participar voluntariamente de uma
               pesquisa sobre <strong>Percepções dos Consumidores sobre Rótulos
@@ -142,6 +206,8 @@ export default function TclePage() {
               Ao prosseguir, você declara que recebeu informações sobre a
               pesquisa e concorda voluntariamente em participar.
             </p>
+              </>
+            )}
           </div>
 
           <label className="tcle-agreement" htmlFor="tcle-agreement">
@@ -151,7 +217,11 @@ export default function TclePage() {
               checked={agreed}
               onChange={(event) => setAgreed(event.target.checked)}
             />
-            <span>Li as informações e concordo voluntariamente em participar.</span>
+            <span>
+              {isNmsu
+                ? "I have read the information and voluntarily agree to participate."
+                : "Li as informações e concordo voluntariamente em participar."}
+            </span>
           </label>
 
           <div className="tcle-actions">
@@ -160,7 +230,7 @@ export default function TclePage() {
               className="secondary-button"
               onClick={handleDecline}
             >
-              Não quero participar
+              {isNmsu ? "I do not want to participate" : "Não quero participar"}
             </button>
             <button
               type="button"
@@ -169,7 +239,9 @@ export default function TclePage() {
               disabled={!agreed}
               onClick={handleAccept}
             >
-              Concordo e quero participar
+              {isNmsu
+                ? "I agree and want to participate"
+                : "Concordo e quero participar"}
             </button>
           </div>
         </article>
