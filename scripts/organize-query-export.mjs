@@ -14,9 +14,46 @@ const SOCIODEMOGRAPHIC_COLUMNS = [
   "income_group",
   "collection_started_at",
   "collection_completed_at",
-  "collection_total_time",
   "collection_total_time_ms",
 ];
+
+// Conversoes para facilitar calculos no Excel.
+const SEAL_IDS = ["red-1", "red-2", "green-1", "green-2", "green-3"];
+const SEAL_NUMBERS = { "red-1": 1, "red-2": 2, "green-1": 3, "green-2": 4, "green-3": 5 };
+const DEMOGRAPHIC_CODES = {
+  gender: { female: 1, male: 2, prefer_not_to_say: 3 },
+  age_group: { age_18_24: 1, age_25_34: 2, age_35_44: 3, age_45_59: 4, age_60_plus: 5 },
+  education_level: {
+    less_than_high_school: 1,
+    high_school_or_ged: 2,
+    some_college_or_associate: 3,
+    bachelor: 4,
+    graduate: 5,
+  },
+  income_group: { income_1: 1, income_2: 2, income_3: 3, income_4: 4, income_5: 5 },
+};
+const YES_NO_COLUMNS = [
+  /_preselection_rank_changed$/,
+  /_ranking_revision_[0-9]+_rank_changed$/,
+  /_changed_preference_before_confirming$/,
+  /_final_confirmation_[0-9]+_response$/,
+  /^s2_agreed_to_descriptions$/,
+  /^s2_all_seals_read$/,
+  /^s1_tcle_accepted$/,
+];
+const SEAL_NUMBER_COLUMNS = [
+  /_rank_[0-9]+_seal_id$/,
+  /_decision_[0-9]+_choice$/,
+  /^s3_top_seal_[0-9]+$/,
+];
+const CONDITION_COLUMN = /^s3_screen_[0-9]+_condition_id$/;
+const CONDITION_NUMBERS = { "3.1": 1, "3.2": 2, "3.3": 3 };
+const DATE_COLUMN = /_at$/;
+const EXCEL_DATE_FORMAT = "dd/mm/yyyy hh:mm:ss";
+// Brasilia nao tem horario de verao desde 2019: UTC-3 fixo.
+const BRASILIA_OFFSET_MS = 3 * 60 * 60 * 1000;
+const EXCEL_UNIX_EPOCH_DAYS = 25_569;
+const MS_PER_DAY = 86_400_000;
 
 function printHelp() {
   console.log(`
@@ -69,7 +106,100 @@ function appendSheet(workbook, name, rows, columns) {
   };
   worksheet["!cols"] = columns.map((column) => columnWidth(column, rows));
 
+  columns.forEach((column, columnIndex) => {
+    if (!DATE_COLUMN.test(column)) return;
+    for (let rowIndex = 1; rowIndex <= rows.length; rowIndex += 1) {
+      const cell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex })];
+      if (cell?.t === "n") cell.z = EXCEL_DATE_FORMAT;
+    }
+  });
+
   XLSX.utils.book_append_sheet(workbook, worksheet, name);
+}
+
+function toBrasiliaExcelDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(value)) return value;
+  const utcMs = Date.parse(value);
+  if (!Number.isFinite(utcMs)) return value;
+  return (utcMs - BRASILIA_OFFSET_MS) / MS_PER_DAY + EXCEL_UNIX_EPOCH_DAYS;
+}
+
+function convertValue(column, value) {
+  if (value === null || value === undefined || value === "") return value;
+  const text = String(value).trim();
+
+  if (DEMOGRAPHIC_CODES[column]) return DEMOGRAPHIC_CODES[column][text] ?? value;
+  if (YES_NO_COLUMNS.some((pattern) => pattern.test(column))) {
+    if (text === "Yes") return 1;
+    if (text === "No") return 0;
+    return value;
+  }
+  if (SEAL_NUMBER_COLUMNS.some((pattern) => pattern.test(column))) {
+    return SEAL_NUMBERS[text] ?? value;
+  }
+  if (CONDITION_COLUMN.test(column)) return CONDITION_NUMBERS[text] ?? value;
+  if (DATE_COLUMN.test(column)) return toBrasiliaExcelDate(value);
+  return value;
+}
+
+function sealPositions(prefix, positionsBySeal) {
+  return Object.fromEntries(
+    SEAL_IDS.map((sealId) => [
+      `${prefix}_${sealId.replace("-", "_")}`,
+      positionsBySeal[sealId] ?? null,
+    ]),
+  );
+}
+
+function positionsFromList(value) {
+  const positionsBySeal = {};
+  if (typeof value !== "string") return positionsBySeal;
+  value
+    .split(" > ")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((sealId, index) => {
+      positionsBySeal[sealId] = index + 1;
+    });
+  return positionsBySeal;
+}
+
+// Novas colunas com a posicao de cada selo, inseridas logo apos a coluna de origem.
+function derivedSealColumns(column, row) {
+  const rankMatch = column.match(/^(s[12]|s3_screen_[0-9]+)_final_confirmed_rank$/);
+  if (rankMatch) {
+    const prefix = rankMatch[1];
+    const positionsBySeal = {};
+    for (let rank = 1; rank <= 5; rank += 1) {
+      const sealId = row[`${prefix}_rank_${rank}_seal_id`];
+      if (sealId) positionsBySeal[String(sealId).trim()] = rank;
+    }
+    return sealPositions(`${prefix}_rank`, positionsBySeal);
+  }
+
+  const displayMatch = column.match(/^(s[12]|s3_screen_[0-9]+)_initial_display_order$/);
+  if (displayMatch) {
+    return sealPositions(`${displayMatch[1]}_display`, positionsFromList(row[column]));
+  }
+  if (column === "s2_seal_reading_initial_display_order") {
+    return sealPositions("s2_reading_display", positionsFromList(row[column]));
+  }
+  if (column === "s2_seal_reading_first_open_order") {
+    return sealPositions("s2_first_open", positionsFromList(row[column]));
+  }
+  return null;
+}
+
+export function prepareRowsForAnalysis(rows) {
+  return rows.map((row) => {
+    const output = {};
+    for (const [column, value] of Object.entries(row)) {
+      output[column] = convertValue(column, value);
+      const derived = derivedSealColumns(column, row);
+      if (derived) Object.assign(output, derived);
+    }
+    return output;
+  });
 }
 
 function stageTimingSourceColumns(sessionNumber) {
@@ -89,7 +219,6 @@ function stageColumns(allColumns, sessionNumber) {
     ...OUTPUT_ID_COLUMNS,
     "session_started_at",
     "session_completed_at",
-    "session_total_time",
     "session_total_time_ms",
     ...allColumns.filter(
       (column) =>
@@ -103,7 +232,7 @@ function stageColumns(allColumns, sessionNumber) {
 }
 
 function stageRows(rows, sessionNumber) {
-  const [startedAt, completedAt, totalTime, totalTimeMs] =
+  const [startedAt, completedAt, , totalTimeMs] =
     stageTimingSourceColumns(sessionNumber);
 
   return rows.map((row) => ({
@@ -112,7 +241,6 @@ function stageRows(rows, sessionNumber) {
     study_location: row.local_estudo,
     session_started_at: row[startedAt],
     session_completed_at: row[completedAt],
-    session_total_time: row[totalTime],
     session_total_time_ms: row[totalTimeMs],
   }));
 }
@@ -144,7 +272,6 @@ function stageThreeColumns(allColumns) {
     const roundTimingColumns = [
       [`${sourcePrefix}ranking_started_at`, `round_${round}_started_at`],
       [`${sourcePrefix}ranking_flow_completed_at`, `round_${round}_completed_at`],
-      [`${sourcePrefix}ranking_flow_total_time`, `round_${round}_total_time`],
       [`${sourcePrefix}ranking_flow_total_time_ms`, `round_${round}_total_time_ms`],
     ];
     const roundTimingSourceColumns = new Set(
@@ -170,7 +297,6 @@ function stageThreeColumns(allColumns) {
     ...OUTPUT_ID_COLUMNS,
     "session_started_at",
     "session_completed_at",
-    "session_total_time",
     "session_total_time_ms",
     ...roundColumns,
     ...generalColumns,
@@ -223,8 +349,6 @@ function stageThreeRows(rows) {
         row[`${sourcePrefix}ranking_started_at`];
       output[`round_${round}_completed_at`] =
         row[`${sourcePrefix}ranking_flow_completed_at`];
-      output[`round_${round}_total_time`] =
-        row[`${sourcePrefix}ranking_flow_total_time`];
       output[`round_${round}_total_time_ms`] =
         row[`${sourcePrefix}ranking_flow_total_time_ms`];
     }
@@ -243,7 +367,6 @@ function sociodemographicRows(rows) {
     income_group: row.income_group,
     collection_started_at: row.full_survey_started_at ?? row.s1_collection_started_at,
     collection_completed_at: row.full_survey_completed_at ?? row.s3_timestamp,
-    collection_total_time: row.full_survey_total_time,
     collection_total_time_ms: row.full_survey_total_time_ms,
   }));
 }
@@ -253,11 +376,12 @@ function defaultOutputPath(inputPath) {
   return path.join(parsed.dir, `${parsed.name}-organized.xlsx`);
 }
 
-export function buildOrganizedWorkbook(rows, createdDate = new Date()) {
-  if (rows.length === 0) {
+export function buildOrganizedWorkbook(sourceRows, createdDate = new Date()) {
+  if (sourceRows.length === 0) {
     throw new Error("Nao existem linhas de resultados para criar o Excel.");
   }
 
+  const rows = prepareRowsForAnalysis(sourceRows);
   const allColumns = orderedUniqueColumns(rows);
   const workbook = XLSX.utils.book_new();
   workbook.Props = {
